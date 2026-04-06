@@ -6,6 +6,10 @@ import uuid
 import re
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load local .env
+load_dotenv()
 
 # ─── Page Config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -151,10 +155,11 @@ init_state()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────────
 def get_gemini():
-    try:
-        key = st.secrets["GOOGLE_API_KEY"]
-    except Exception:
-        key = os.environ.get("GOOGLE_API_KEY", "")
+    # Try multiple common key names for Gemini
+    key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    
+    if not key:
+        key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not key:
         st.error("⚠️  GOOGLE_API_KEY not found. Add it to Streamlit secrets.")
         st.stop()
