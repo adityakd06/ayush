@@ -154,22 +154,51 @@ def init_state():
 init_state()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────────
-def get_gemini(model_name="models/gemini-1.5-flash", system_instruction=None):
+@st.cache_resource
+def get_model_discovery():
+    """List available models and pick the best one to avoid NotFound errors."""
+    try:
+        # We need the key here just for discovery
+        key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+        if not key:
+            key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+        if not key: return None
+        
+        genai.configure(api_key=key)
+        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        
+        # Priority list
+        priorities = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
+        for p in priorities:
+            if p in models: return p
+            
+        # Last resort: anything with 'gemini' in it
+        for m in models:
+            if "gemini" in m.lower(): return m
+            
+        return models[0] if models else "models/gemini-pro"
+    except Exception as e:
+        st.warning(f"Model discovery info: {e}")
+        return "models/gemini-pro"
+
+def get_gemini(system_instruction=None):
     key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
     if not key:
         key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not key:
-        st.error("⚠️  GOOGLE_API_KEY not found. Add it to Streamlit secrets.")
+        st.error("⚠️ GOOGLE_API_KEY not found.")
         st.stop()
     
     genai.configure(api_key=key)
+    best_model = get_model_discovery() or "models/gemini-pro"
+    
     return genai.GenerativeModel(
-        model_name=model_name,
+        model_name=best_model,
         system_instruction=system_instruction,
-        generation_config=genai.types.GenerationConfig(
-            temperature=0.75,
-            max_output_tokens=4096,
-        ),
+        generation_config= {
+            "temperature": 0.75,
+            "max_output_tokens": 4096,
+        }
     )
 
 def load_kb():
@@ -331,17 +360,14 @@ Tone: {tone}
 
 Generate all 5 variations labeled ## VARIATION N: TITLE."""
 
-    with st.spinner("✦ Generating with Gemini…"):
+    with st.spinner("✦ AI Generating…"):
         try:
-            model = get_gemini("models/gemini-1.5-flash", system_instruction=system)
+            model = get_gemini(system_instruction=system)
             response = model.generate_content(full_prompt)
+            return response.text
         except Exception as e:
-            if "NotFound" in str(e) or "not found" in str(e).lower():
-                model = get_gemini("models/gemini-1.5-pro", system_instruction=system)
-                response = model.generate_content(full_prompt)
-            else:
-                raise e
-    return response.text
+            st.error(f"Generation failed: {e}")
+            st.stop()
 
 def chat_follow_up(user_msg, context, mode, kb):
     system = build_system(mode, kb)
@@ -356,23 +382,18 @@ def chat_follow_up(user_msg, context, mode, kb):
         role = "user" if m["role"] == "user" else "model"
         gemini_history.append({"role": role, "parts": [m["content"]]})
 
-    with st.spinner("✦ Thinking…"):
+    with st.spinner("✦ AI Thinking…"):
         try:
-            model = get_gemini("models/gemini-1.5-flash", system_instruction=system)
+            model = get_gemini(system_instruction=system)
             chat = model.start_chat(history=gemini_history)
             response = chat.send_message(user_msg)
+            bot_msg = response.text
+            st.session_state.messages.append({"role": "assistant", "content": bot_msg})
+            save_chat()
+            return bot_msg
         except Exception as e:
-            if "NotFound" in str(e) or "not found" in str(e).lower():
-                model = get_gemini("models/gemini-1.5-pro", system_instruction=system)
-                chat = model.start_chat(history=gemini_history)
-                response = chat.send_message(user_msg)
-            else:
-                raise e
-
-    bot_msg = response.text
-    st.session_state.messages.append({"role": "assistant", "content": bot_msg})
-    save_chat()
-    return bot_msg
+            st.error(f"Chat failed: {e}")
+            st.stop()
 
 # ══════════════════════════════════════════════════════════════════════════════════
 #  SIDEBAR
