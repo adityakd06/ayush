@@ -11,4 +11,3 @@ maxUploadSize = 10
 headless = true
 enableCORS = false
 
-GEMINI_API_KEY="AIzaSyBnQCqz50OCDsaGmH5mjMnTcyP8KpMb-KI"
