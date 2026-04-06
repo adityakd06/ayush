@@ -306,13 +306,13 @@ init_state()
 # ─── Helpers ──────────────────────────────────────────────────────────────────────
 def get_client():
     try:
-        key = st.secrets["ANTHROPIC_API_KEY"]
+        key = st.secrets["GEMINI_API_KEY"]
     except Exception:
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        key = os.environ.get("GEMINI_API_KEY", "")
     if not key:
-        st.error("⚠️ ANTHROPIC_API_KEY not found. Add it to Streamlit secrets or environment variables.")
+        st.error("⚠️ GEMINI_API_KEY not found. Add it to Streamlit secrets or environment variables.")
         st.stop()
-    return anthropic.Anthropic(api_key=key)
+    genai.configure(api_key=key)
 
 def load_kb():
     try:
@@ -465,7 +465,7 @@ def parse_variations(raw_text):
     return variations
 
 def generate_variations(context, instructions, mode, kb, language, tone):
-    client = get_client()
+    get_client()
     system = build_system(mode, kb)
 
     full_prompt = f"""CONVERSATION CONTEXT / TRANSCRIPT:
@@ -481,32 +481,43 @@ ADDITIONAL PREFERENCES:
 Now generate all 5 variations exactly as instructed in your system prompt. Label each clearly."""
 
     with st.spinner("✦ Generating variations…"):
-        resp = get_client().messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4000,
-            system=system,
-            messages=[{"role": "user", "content": full_prompt}],
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-pro",
+            system_instruction=system
         )
-    return resp.content[0].text
+        resp = model.generate_content(
+            full_prompt,
+            generation_config={
+                "temperature": 0.7,
+                "max_output_tokens": 4000,
+                "top_p": 0.9
+            }
+        )
+    return resp.text
 
 def chat_follow_up(user_msg, context, mode, kb):
+    get_client()
     system = build_system(mode, kb)
     if context.strip():
         system += f"\n\n═══ SESSION CONTEXT ═══\n{context[:2000]}\n═══════════════════"
 
     st.session_state.messages.append({"role": "user", "content": user_msg})
 
-    # Keep last 20 messages for context window
-    history = st.session_state.messages[-20:]
+    # Map history to Gemini format (assistant -> model)
+    history = []
+    for m in st.session_state.messages[-20:-1]: # all except the last one
+        role = "model" if m["role"] == "assistant" else "user"
+        history.append({"role": role, "parts": [m["content"]]})
 
     with st.spinner("✦ Thinking…"):
-        resp = get_client().messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            system=system,
-            messages=history,
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-pro",
+            system_instruction=system
         )
-    bot_msg = resp.content[0].text
+        chat = model.start_chat(history=history)
+        resp = chat.send_message(user_msg)
+
+    bot_msg = resp.text
     st.session_state.messages.append({"role": "assistant", "content": bot_msg})
     save_chat()
     return bot_msg
