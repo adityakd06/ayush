@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# Streamlit secrets (NEVER commit)
+.streamlit/secrets.toml
+
+# Data (runtime generated — don't commit chat history)
+data/chats/
+data/knowledge_base.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

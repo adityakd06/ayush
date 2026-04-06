@@ -1,0 +1,14 @@
+[theme]
+base = "dark"
+backgroundColor = "#0d0f14"
+secondaryBackgroundColor = "#111318"
+textColor = "#e8eaf0"
+primaryColor = "#7c6fff"
+font = "sans serif"
+
+[server]
+maxUploadSize = 10
+headless = true
+enableCORS = false
+
+GEMINI_API_KEY="AIzaSyBnQCqz50OCDsaGmH5mjMnTcyP8KpMb-KI"
