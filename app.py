@@ -8,8 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load local .env
-load_dotenv()
+# Load local .env with override=True to ensure key changes are picked up
+load_dotenv(override=True)
 
 # ─── Page Config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -154,17 +154,11 @@ def init_state():
 init_state()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────────
-@st.cache_resource
-def get_model_discovery():
-    """List available models and pick the best one to avoid NotFound errors."""
+@st.cache_data(show_spinner=False)
+def get_model_discovery(api_key):
+    """List available models and pick the best one. Cached by API key."""
     try:
-        # We need the key here just for discovery
-        key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-        if not key:
-            key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-        if not key: return None
-        
-        genai.configure(api_key=key)
+        genai.configure(api_key=api_key)
         models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
         
         # Priority list
@@ -172,14 +166,12 @@ def get_model_discovery():
         for p in priorities:
             if p in models: return p
             
-        # Last resort: anything with 'gemini' in it
+        # Last resort
         for m in models:
             if "gemini" in m.lower(): return m
-            
-        return models[0] if models else "models/gemini-pro"
+        return models[0] if models else "models/gemini-1.5-flash"
     except Exception as e:
-        st.warning(f"Model discovery info: {e}")
-        return "models/gemini-pro"
+        return "models/gemini-1.5-flash"
 
 def get_gemini(system_instruction=None):
     key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
@@ -190,12 +182,13 @@ def get_gemini(system_instruction=None):
         st.stop()
     
     genai.configure(api_key=key)
-    best_model = get_model_discovery() or "models/gemini-pro"
+    # Cache bust by passing key
+    best_model = get_model_discovery(key)
     
     return genai.GenerativeModel(
         model_name=best_model,
         system_instruction=system_instruction,
-        generation_config= {
+        generation_config={
             "temperature": 0.75,
             "max_output_tokens": 4096,
         }
