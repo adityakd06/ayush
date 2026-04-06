@@ -154,20 +154,20 @@ def init_state():
 init_state()
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────────
-def get_gemini():
-    # Try multiple common key names for Gemini
+def get_gemini(model_name="models/gemini-1.5-flash", system_instruction=None):
     key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-    
     if not key:
         key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
     if not key:
         st.error("⚠️  GOOGLE_API_KEY not found. Add it to Streamlit secrets.")
         st.stop()
+    
     genai.configure(api_key=key)
     return genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name=model_name,
+        system_instruction=system_instruction,
         generation_config=genai.types.GenerationConfig(
-            temperature=0.85,
+            temperature=0.75,
             max_output_tokens=4096,
         ),
     )
@@ -314,7 +314,6 @@ def parse_variations(raw_text):
     return variations
 
 def generate_variations(context, instructions, mode, kb, language, tone):
-    model = get_gemini()
     system = build_system(mode, kb)
 
     full_prompt = f"""{system}
@@ -325,43 +324,50 @@ CONVERSATION CONTEXT / TRANSCRIPT:
 {context if context.strip() else "(No specific transcript — generate based on instructions below)"}
 
 TASK INSTRUCTIONS:
-{instructions if instructions.strip() else "Generate appropriate variations for an insurance customer re-engagement call."}
+{instructions if instructions.strip() else "Generate insurance variations."}
 
-ADDITIONAL PREFERENCES:
-- Language style: {language}
-- Tone emphasis: {tone}
+Language: {language}
+Tone: {tone}
 
-Now generate all 5 variations exactly as instructed above. Label each with ## VARIATION N: TITLE format."""
+Generate all 5 variations labeled ## VARIATION N: TITLE."""
 
-    with st.spinner("✦ Generating variations with Gemini…"):
-        response = model.generate_content(full_prompt)
+    with st.spinner("✦ Generating with Gemini…"):
+        try:
+            model = get_gemini("models/gemini-1.5-flash", system_instruction=system)
+            response = model.generate_content(full_prompt)
+        except Exception as e:
+            if "NotFound" in str(e) or "not found" in str(e).lower():
+                model = get_gemini("models/gemini-1.5-pro", system_instruction=system)
+                response = model.generate_content(full_prompt)
+            else:
+                raise e
     return response.text
 
 def chat_follow_up(user_msg, context, mode, kb):
-    model = get_gemini()
     system = build_system(mode, kb)
     if context.strip():
         system += f"\n\n=== SESSION CONTEXT ===\n{context[:2000]}\n======================"
 
-    # Build Gemini-compatible history
-    # Gemini expects alternating user/model roles
     st.session_state.messages.append({"role": "user", "content": user_msg})
 
-    # Convert our history to Gemini format
+    # Convert history to Gemini format
     gemini_history = []
-    for m in st.session_state.messages[:-1]:  # exclude the latest user msg we just added
+    for m in st.session_state.messages[:-1]:
         role = "user" if m["role"] == "user" else "model"
         gemini_history.append({"role": role, "parts": [m["content"]]})
 
-    # Start a chat session with history
-    chat = model.start_chat(history=gemini_history)
-
     with st.spinner("✦ Thinking…"):
-        response = chat.send_message(
-            f"[SYSTEM CONTEXT — follow this always: {system[:500]}]\n\n{user_msg}"
-            if not gemini_history
-            else user_msg
-        )
+        try:
+            model = get_gemini("models/gemini-1.5-flash", system_instruction=system)
+            chat = model.start_chat(history=gemini_history)
+            response = chat.send_message(user_msg)
+        except Exception as e:
+            if "NotFound" in str(e) or "not found" in str(e).lower():
+                model = get_gemini("models/gemini-1.5-pro", system_instruction=system)
+                chat = model.start_chat(history=gemini_history)
+                response = chat.send_message(user_msg)
+            else:
+                raise e
 
     bot_msg = response.text
     st.session_state.messages.append({"role": "assistant", "content": bot_msg})
