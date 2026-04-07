@@ -1,9 +1,11 @@
-import streamlit as st
-import google.generativeai as genai
-import json, os, uuid, re, sqlite3
+import json, os, uuid, re, sqlite3, time
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
+import openai
+import anthropic
+import groq
+from google.api_core import exceptions as google_exceptions
 
 # Load local .env
 load_dotenv()
@@ -264,6 +266,8 @@ ss("about_val",  "")
 ss("instr_val",  "")
 ss("lang_val",   "Hinglish (Hindi + English)")
 ss("history_index", 0)
+ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq
+ss("llm_model",    "gemini-1.5-flash")
 ss("pending_new_chat", False)
 
 # ── GEMINI ────────────────────────────────────────────────────────────────────────
@@ -305,8 +309,71 @@ def get_model():
         generation_config=genai.types.GenerationConfig(temperature=0.9, max_output_tokens=4096),
     )
 
-import time
-from google.api_core import exceptions
+# ── UNIFIED LLM ENGINE ────────────────────────────────────────────────────────────
+def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
+    provider = provider or st.session_state.llm_provider
+    
+    if provider == "Gemini":
+        gm = get_model()
+        if not gm: return None
+        try:
+            resp = call_gemini_with_retry(gm.generate_content, f"{system_prompt}\n\n{user_prompt}")
+            return resp.text
+        except Exception as e:
+            st.error(f"Gemini Error: {e}")
+            return None
+
+    elif provider == "OpenAI":
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key: 
+            st.error("Missing OPENAI_API_KEY in .env")
+            return None
+        client = openai.OpenAI(api_key=key)
+        try:
+            resp = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[{"role":"system","content":system_prompt}, {"role":"user","content":user_prompt}]
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            st.error(f"OpenAI Error: {e}")
+            return None
+
+    elif provider == "Claude":
+        key = os.environ.get("ANTHROPIC_API_KEY")
+        if not key: 
+            st.error("Missing ANTHROPIC_API_KEY in .env")
+            return None
+        client = anthropic.Anthropic(api_key=key)
+        try:
+            resp = client.messages.create(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=4096,
+                system=system_prompt,
+                messages=[{"role":"user","content":user_prompt}]
+            )
+            return resp.content[0].text
+        except Exception as e:
+            st.error(f"Claude Error: {e}")
+            return None
+
+    elif provider == "Groq/Meta":
+        key = os.environ.get("GROQ_API_KEY")
+        if not key: 
+            st.error("Missing GROQ_API_KEY in .env")
+            return None
+        client = groq.Groq(api_key=key)
+        try:
+            resp = client.chat.completions.create(
+                model="llama3-70b-8192",
+                messages=[{"role":"system","content":system_prompt}, {"role":"user","content":user_prompt}]
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            st.error(f"Groq Error: {e}")
+            return None
+    
+    return None
 
 def call_gemini_with_retry(func, *args, **kwargs):
     """Retries a Gemini call on 429 errors."""
@@ -314,7 +381,7 @@ def call_gemini_with_retry(func, *args, **kwargs):
     for i in range(max_retries):
         try:
             return func(*args, **kwargs)
-        except exceptions.ResourceExhausted as e:
+        except google_exceptions.ResourceExhausted as e:
             if i < max_retries - 1:
                 wait_time = (i + 1) * 3
                 st.info(f"⏳ Rate limit hit. Retrying in {wait_time}s... (Attempt {i+1}/{max_retries})")
@@ -395,6 +462,9 @@ def start_new_chat():
     st.session_state.about_val  = ""
     st.session_state.instr_val  = ""
     st.session_state.history_index = 0
+    # Force clear widgets
+    if "about_input" in st.session_state: st.session_state.about_input = ""
+    if "instr_input" in st.session_state: st.session_state.instr_input = ""
 
 # ── PARSING ───────────────────────────────────────────────────────────────────────
 VARIATION_LABELS = ["a", "b", "c", "d", "e"]
@@ -449,59 +519,13 @@ OUTPUT RULES — follow these exactly:
 
 # ── AI GENERATE ───────────────────────────────────────────────────────────────────
 def run_generate(about, instructions, mode, kb, language):
-    model = get_model()
-    if model is None:
-        st.error("⚠️ GOOGLE_API_KEY not set. Go to Streamlit Cloud → your app → Settings → Secrets and add:  GOOGLE_API_KEY = \"your-key\"")
-        return None
-
     system = build_system(mode, kb, about)
-    prompt = f"""{system}
-
----
-INSTRUCTIONS (what to generate):
-{instructions if instructions.strip() else "Generate a customer re-engagement call for a lapsed ABHI health insurance policy."}
-
-LANGUAGE: {language}
-
-Now write all 5 variations using ## VARIATION N: TITLE format. Be thorough and distinct for each variation."""
-
-    try:
-        with st.spinner("Generating variations…"):
-            resp = call_gemini_with_retry(model.generate_content, prompt)
-        return resp.text
-    except exceptions.ResourceExhausted:
-        st.error("❌ Quota exceeded. Please wait a minute before trying again.")
-        return None
+    prompt = f"LANGUAGE: {language}\n\n{instructions if instructions.strip() else 'Generate variations.'}"
+    return run_llm_request(system, prompt)
 
 def run_chat(user_msg, about, mode, kb):
-    model = get_model()
-    if model is None:
-        return "⚠️ API key not configured."
-
     system = build_system(mode, kb, about)
-    # Build Gemini-compatible history (exclude [GENERATE] meta messages)
-    history = []
-    for m in st.session_state.messages:
-        if m["content"].startswith("[GENERATE"):
-            continue
-        role = "user" if m["role"] == "user" else "model"
-        history.append({"role": role, "parts": [m["content"]]})
-
-    # Remove last entry if it's the current user message (we'll send it fresh)
-    if history and history[-1]["role"] == "user":
-        history = history[:-1]
-
-    chat = model.start_chat(history=history)
-    full_msg = f"[System: {system[:400]}]\n\n{user_msg}" if not history else user_msg
-
-    try:
-        with st.spinner("Thinking…"):
-            resp = call_gemini_with_retry(chat.send_message, full_msg)
-        return resp.text
-    except exceptions.ResourceExhausted:
-        return "⚠️ Rate limit exceeded. Please wait a moment."
-    except Exception as e:
-        return f"Error: {e}"
+    return run_llm_request(f"[System Instruction: {system[:500]}]", user_msg)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -596,9 +620,16 @@ with st.sidebar:
 kb = load_kb()
 
 # ── HEADER ──
-hcol1, hcol2 = st.columns([5, 1])
+hcol1, hcolM, hcol2 = st.columns([3, 2, 1])
 with hcol1:
     st.markdown('<h1 style="font-family:\'Syne\',sans-serif;font-size:1.4rem;margin:0">DialogueBot · ABHI Optimizer</h1>', unsafe_allow_html=True)
+with hcolM:
+    st.session_state.llm_provider = st.selectbox(
+        "Model Selector",
+        options=["Gemini", "OpenAI", "Claude", "Groq/Meta"],
+        index=["Gemini", "OpenAI", "Claude", "Groq/Meta"].index(st.session_state.llm_provider),
+        label_visibility="collapsed"
+    )
 with hcol2:
     if st.button("＋ New Chat", use_container_width=True, type="primary", key="main_new"):
         start_new_chat()
