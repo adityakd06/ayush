@@ -3,6 +3,10 @@ import google.generativeai as genai
 import json, os, uuid, re
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load local .env
+load_dotenv()
 
 # ── MUST BE FIRST ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -235,15 +239,17 @@ ss("variations", None)        # parsed list of dicts
 ss("about_val",  "")
 ss("instr_val",  "")
 ss("lang_val",   "Hinglish (Hindi + English)")
+ss("history_index", 0)
 ss("pending_new_chat", False)
 
 # ── GEMINI ────────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_model():
-    try:
-        key = st.secrets["GOOGLE_API_KEY"]
-    except Exception:
-        key = os.environ.get("GOOGLE_API_KEY", "")
+    # Search priority: st.secrets -> os.environ (includes .env)
+    key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    if not key:
+        key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+    
     if not key:
         return None
     genai.configure(api_key=key)
@@ -321,6 +327,7 @@ def start_new_chat():
     st.session_state.variations = None
     st.session_state.about_val  = ""
     st.session_state.instr_val  = ""
+    st.session_state.history_index = 0
 
 # ── PARSING ───────────────────────────────────────────────────────────────────────
 VARIATION_LABELS = ["a", "b", "c", "d", "e"]
@@ -605,8 +612,19 @@ with left:
 
     # Show visible messages (skip meta tags)
     visible = [m for m in st.session_state.messages if not m["content"].startswith("[GENERATE")]
+    
     if visible:
-        for msg in visible[-10:]:
+        # History Slider
+        if len(visible) > 1:
+            st.session_state.history_index = st.slider(
+                "Navigate History", 0, len(visible) - 1, len(visible) - 1,
+                label_visibility="collapsed", help="Slide to review previous turns."
+            )
+        else:
+            st.session_state.history_index = 0
+
+        # Display up to selected index
+        for msg in visible[:st.session_state.history_index + 1]:
             if msg["role"] == "user":
                 st.markdown(f"""
                 <div style="background:#14172a;border:1px solid #1e2235;border-radius:10px 10px 3px 10px;
@@ -614,14 +632,20 @@ with left:
                     🧑 {msg['content']}
                 </div>""", unsafe_allow_html=True)
             else:
-                preview = msg["content"]
-                if len(preview) > 600:
-                    preview = preview[:600] + "\n…(see variations on the right)"
-                st.markdown(f"""
-                <div style="background:#0f1117;border:1px solid #1c1f2e;border-radius:10px 10px 10px 3px;
-                            padding:10px 14px;margin:6px 24px 6px 0;font-size:.85rem;color:#b0b3c8;white-space:pre-wrap;">
-                    🤖 {preview}
-                </div>""", unsafe_allow_html=True)
+                content = msg["content"]
+                # If it's the full variation block, show a summary in chat
+                if "## VARIATION" in content:
+                    st.markdown("""
+                    <div style="background:#0f1117;border:1px dashed #2a2f50;border-radius:10px;
+                                padding:8px 12px;margin:6px 24px 6px 0;font-size:.78rem;color:#4f8ef7;text-align:center;">
+                        ✦ New variations generated (see right panel) ✦
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""
+                    <div style="background:#0f1117;border:1px solid #1c1f2e;border-radius:10px 10px 10px 3px;
+                                padding:10px 14px;margin:6px 24px 6px 0;font-size:.85rem;color:#b0b3c8;white-space:pre-wrap;">
+                        🤖 {content}
+                    </div>""", unsafe_allow_html=True)
 
     follow_up = st.chat_input("Ask a follow-up or refine a variation…", key="chat_input")
 
