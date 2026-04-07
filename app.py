@@ -141,11 +141,12 @@ hr { border-color: #1e2130 !important; margin: 20px 0 !important; }
 def init_state():
     defaults = {
         "current_chat_id": str(uuid.uuid4()),
-        "messages": [],          # [{role, content}]  — plain text for Gemini
+        "messages": [],          # [{role, content}]
         "generated_dialogues": None,
         "mode": "dialogue",
-        "context_text": "",
-        "instructions_text": "",
+        "prompt_text": "",
+        "constraints_text": "",
+        "history_index": 0,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -342,10 +343,10 @@ def generate_variations(context, instructions, mode, kb, language, tone):
 
 ---
 
-CONVERSATION CONTEXT / TRANSCRIPT:
-{context if context.strip() else "(No specific transcript — generate based on instructions below)"}
+USER REQUEST / CONTEXT:
+{context if context.strip() else "(No specific prompt provided)"}
 
-TASK INSTRUCTIONS:
+TASK CONSTRAINTS:
 {instructions if instructions.strip() else "Generate insurance variations."}
 
 Language: {language}
@@ -514,24 +515,24 @@ st.markdown('<div class="section-label">INPUT</div>', unsafe_allow_html=True)
 col_left, col_right = st.columns([3, 2], gap="large")
 
 with col_left:
-    st.markdown("**Conversation Context / Transcript**")
+    st.markdown("**Your Prompt / Context**")
     context = st.text_area(
         "ctx", label_visibility="collapsed",
-        value=st.session_state.context_text, height=220,
-        placeholder="It tells the AI exactly what has already been said in the conversation.",
+        value=st.session_state.prompt_text, height=220,
+        placeholder="Type your primary prompt here (e.g., 'Generate a dialogue between an agent and a customer about policy renewal') or paste a transcript...",
         key="ctx_input",
     )
-    st.session_state.context_text = context
+    st.session_state.prompt_text = context
 
 with col_right:
-    st.markdown("**Instructions for the Bot**")
+    st.markdown("**Additional Constraints**")
     instructions = st.text_area(
         "instr", label_visibility="collapsed",
-        value=st.session_state.instructions_text, height=120,
-        placeholder="e.g. Generate a dialogue for when the customer says they already have LIC insurance and don't want to switch. Focus on porting benefits.",
+        value=st.session_state.constraints_text, height=120,
+        placeholder="e.g. Focus on porting benefits, don't mention price in the first 3 turns...",
         key="instr_input",
     )
-    st.session_state.instructions_text = instructions
+    st.session_state.constraints_text = instructions
 
     st.markdown("**Preferences**")
     pcol1, pcol2 = st.columns(2)
@@ -596,21 +597,32 @@ if st.session_state.generated_dialogues:
 
 # ─── Chat Section ────────────────────────────────────────────────────────────────
 st.markdown('<hr>', unsafe_allow_html=True)
-st.markdown('<div class="section-label">CHAT & REFINE</div>', unsafe_allow_html=True)
+st.markdown('<div class="section-label">END-TO-END CONVERSATION HISTORY</div>', unsafe_allow_html=True)
 
 visible_msgs = [m for m in st.session_state.messages if not m["content"].startswith("[GENERATE")]
 
 if visible_msgs:
-    for msg in visible_msgs[-16:]:
+    # Navigation Slider
+    if len(visible_msgs) > 1:
+        st.session_state.history_index = st.slider(
+            "Scroll through conversation history",
+            0, len(visible_msgs) - 1, len(visible_msgs) - 1,
+            help="Slide to review previous turns in this conversation."
+        )
+    
+    # Display up to the selected slide
+    for i, msg in enumerate(visible_msgs[:st.session_state.history_index + 1]):
         if msg["role"] == "user":
             st.markdown(f'<div class="chat-msg-user">🧑 {msg["content"]}</div>', unsafe_allow_html=True)
         else:
             content = msg["content"]
-            if len(content) > 800:
-                content = content[:800] + "\n\n*[Full output shown above in variations panel]*"
-            st.markdown(f'<div class="chat-msg-bot">🤖 {content}</div>', unsafe_allow_html=True)
+            # Formatting full response
+            if "## VARIATION" in content:
+                st.markdown('<div class="chat-msg-bot">🤖 *New Variations Generated (See variations panel above)*</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="chat-msg-bot">🤖 {content}</div>', unsafe_allow_html=True)
 else:
-    st.markdown('<div class="info-box">💡 Generate variations above, then refine here — "make V2 shorter", "translate V3 to pure Hindi", "add callback scheduling to V4"…</div>', unsafe_allow_html=True)
+    st.markdown('<div class="info-box">💡 Describe your mission above and generate variations to start the conversation flow.</div>', unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 user_chat = st.chat_input("Ask a follow-up or request refinements…")
