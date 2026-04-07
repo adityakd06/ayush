@@ -562,18 +562,23 @@ def parse_variations(raw: str):
     return out if out else [{"title": "Output", "content": raw.strip()}]
 
 # ── SYSTEM PROMPT ─────────────────────────────────────────────────────────────────
-def build_system(mode: str, kb: dict, about: str) -> str:
+def build_system(mode: str, about: str) -> str:
     today = datetime.now().strftime("%B %d, %Y")
+    cid = st.session_state.client_id
 
     client_ctx = f"\n\nCLIENT CONTEXT:\n{about}" if about.strip() else ""
 
     kb_ref = ""
-    if mode == "dialogue" and kb.get("dialogues"):
-        items  = "\n\n---\n".join(f"[{d['name']}]\n{d['content']}" for d in kb["dialogues"][-5:])
-        kb_ref = f"\n\nREFERENCE DIALOGUES FROM KNOWLEDGE BASE:\n{items}"
-    elif mode == "script" and kb.get("scripts"):
-        items  = "\n\n---\n".join(f"[{s['name']}]\n{s['content']}" for s in kb["scripts"][-5:])
-        kb_ref = f"\n\nREFERENCE SCRIPTS FROM KNOWLEDGE BASE:\n{items}"
+    if mode == "dialogue":
+        items_db = db_kb_get(cid, "dialogue")
+        if items_db:
+            items = "\n\n---\n".join(f"[{d['name']}]\n{d['content']}" for d in items_db[:5])
+            kb_ref = f"\n\nREFERENCE DIALOGUES FROM KNOWLEDGE BASE:\n{items}"
+    else:  # script
+        items_db = db_kb_get(cid, "script")
+        if items_db:
+            items = "\n\n---\n".join(f"[{s['name']}]\n{s['content']}" for s in items_db[:5])
+            kb_ref = f"\n\nREFERENCE SCRIPTS FROM KNOWLEDGE BASE:\n{items}"
 
     if mode == "dialogue":
         return f"""You are a senior dialogue writer and sales communication expert for Aditya Birla Health Insurance (ABHI). Today is {today}.
@@ -599,13 +604,13 @@ OUTPUT RULES — follow these exactly:
 4. Each script must be directly implementable in a voice AI pipeline."""
 
 # ── AI GENERATE ───────────────────────────────────────────────────────────────────
-def run_generate(about, instructions, mode, kb, language):
-    system = build_system(mode, kb, about)
+def run_generate(about, instructions, mode, language):
+    system = build_system(mode, about)
     prompt = f"LANGUAGE: {language}\n\n{instructions if instructions.strip() else 'Generate variations.'}"
     return run_llm_request(system, prompt)
 
-def run_chat(user_msg, about, mode, kb):
-    system = build_system(mode, kb, about)
+def run_chat(user_msg, about, mode):
+    system = build_system(mode, about)
     return run_llm_request(f"[System Instruction: {system[:500]}]", user_msg)
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -693,9 +698,7 @@ with st.sidebar:
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN — two-column layout matching the sketch
 # ─────────────────────────────────────────────────────────────────────────────
-kb = load_kb()
-
-# ── HEADER ──
+# ── MAIN — multi-client dashboard
 hcol1, hcol_client, hcolM, hcol2 = st.columns([2.5, 2, 2, 1])
 with hcol1:
     st.markdown('<h1 style="font-family:\'Syne\',sans-serif;font-size:1.4rem;margin:0">DialogueBot · Platform</h1>', unsafe_allow_html=True)
@@ -904,7 +907,7 @@ if do_generate:
         instr_msg = instructions.strip() or "Generate re-engagement call variations."
         combined  = f"{first_msg}\n\n[INSTRUCTIONS] {instr_msg}".strip()
 
-        raw = run_generate(about, instructions, st.session_state.mode, kb, language)
+        raw = run_generate(about, instructions, st.session_state.mode, language)
         if raw:
             st.session_state.messages.append({"role": "user",      "content": f"[GENERATE] {combined[:100]}"})
             st.session_state.messages.append({"role": "assistant", "content": raw})
@@ -912,8 +915,8 @@ if do_generate:
             
             # Persist to DB
             first_user = next((m["content"] for m in st.session_state.messages if m["role"] == "user"), "New Chat")
-            title = re.sub(r'\[.*?\]', '', first_user).strip()[:60]
-            db_save_session(st.session_state.chat_id, title, st.session_state.mode, about)
+            title = re.sub(r'\[.*?\]', '', first_user).strip()[:60] or "Untitled Chat"
+            db_save_session(st.session_state.chat_id, st.session_state.client_id, title, st.session_state.mode)
             db_save_message(st.session_state.chat_id, "user", f"[GENERATE] {combined[:100]}")
             db_save_message(st.session_state.chat_id, "assistant", raw)
             st.rerun()
@@ -923,10 +926,12 @@ if do_generate:
 # ─────────────────────────────────────────────────────────────────────────────
 if follow_up:
     st.session_state.messages.append({"role": "user", "content": follow_up})
-    bot_reply = run_chat(follow_up, about, st.session_state.mode, kb)
+    bot_reply = run_chat(follow_up, about, st.session_state.mode)
     st.session_state.messages.append({"role": "assistant", "content": bot_reply})
     db_save_message(st.session_state.chat_id, "user", follow_up)
     db_save_message(st.session_state.chat_id, "assistant", bot_reply)
+    # Ensure session is saved if it's new
+    db_save_session(st.session_state.chat_id, st.session_state.client_id, follow_up[:60] or "Chat", st.session_state.mode)
     st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
