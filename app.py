@@ -1,6 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
-import json, os, uuid, re
+import json, os, uuid, re, sqlite3
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
@@ -13,16 +13,40 @@ st.set_page_config(
     page_title="DialogueBot · ABHI",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed", # Hide the standard sidebar
 )
 
-# ── DATA PATHS ───────────────────────────────────────────────────────────────────
+# ── DATABASE & PATHS ─────────────────────────────────────────────────────────────
 DATA_DIR  = Path("data")
-CHATS_DIR = DATA_DIR / "chats"
-KB_FILE   = DATA_DIR / "knowledge_base.json"
-
 DATA_DIR.mkdir(parents=True, exist_ok=True)
-CHATS_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DATA_DIR / "dialogue_store.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    # Sessions table
+    c.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        title TEXT,
+        mode TEXT,
+        about TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    # Messages table
+    c.execute("""CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id TEXT,
+        role TEXT,
+        content TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+    )""")
+    conn.commit()
+    conn.close()
+
+init_db()
+
+KB_FILE = DATA_DIR / "knowledge_base.json"
 if not KB_FILE.exists():
     KB_FILE.write_text(json.dumps({"scripts": [], "dialogues": []}, ensure_ascii=False))
 
@@ -301,6 +325,39 @@ def call_gemini_with_retry(func, *args, **kwargs):
             raise e
 
 # ── DATA HELPERS ─────────────────────────────────────────────────────────────────
+# ── DATABASE HELPERS ────────────────────────────────────────────────────────────
+def db_save_session(sid, title, mode, about):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO sessions (id, title, mode, about) VALUES (?, ?, ?, ?)",
+              (sid, title, mode, about))
+    conn.commit()
+    conn.close()
+
+def db_save_message(sid, role, content):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+              (sid, role, content))
+    conn.commit()
+    conn.close()
+
+def db_get_sessions():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, title, mode, timestamp FROM sessions ORDER BY timestamp DESC LIMIT 15")
+    rows = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "title": r[1], "mode": r[2], "timestamp": r[3]} for r in rows]
+
+def db_get_messages(sid):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT role, content FROM messages WHERE session_id = ? ORDER BY timestamp ASC", (sid,))
+    rows = c.fetchall()
+    conn.close()
+    return [{"role": r[0], "content": r[1]} for r in rows]
+
 def load_kb():
     try:
         return json.loads(KB_FILE.read_text(encoding="utf-8"))
@@ -314,56 +371,24 @@ def save_kb(kb):
     except Exception:
         return False
 
-def get_chat_history():
-    try:
-        files = sorted(CHATS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)[:12]
-        return [json.loads(f.read_text(encoding="utf-8")) for f in files]
-    except Exception:
-        return []
-
-def save_current_chat():
-    if not st.session_state.messages:
-        return
-    try:
-        first_user = next(
-            (m["content"] for m in st.session_state.messages if m["role"] == "user"), ""
-        )
-        title = re.sub(r'\[.*?\]', '', first_user).strip()[:60] or "Untitled"
-        payload = {
-            "id":        st.session_state.chat_id,
-            "title":     title,
-            "timestamp": datetime.now().isoformat(),
-            "messages":  st.session_state.messages,
-            "mode":      st.session_state.mode,
-            "about":     st.session_state.about_val,
-        }
-        (CHATS_DIR / f"{st.session_state.chat_id}.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2)
-        )
-    except Exception:
-        pass
-
-def load_chat(chat_id: str):
-    f = CHATS_DIR / f"{chat_id}.json"
-    if not f.exists():
-        return
-    try:
-        data = json.loads(f.read_text(encoding="utf-8"))
+def load_chat(chat_id):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT title, mode, about FROM sessions WHERE id = ?", (chat_id,))
+    row = c.fetchone()
+    conn.close()
+    if row:
         st.session_state.chat_id    = chat_id
-        st.session_state.messages   = data.get("messages", [])
-        st.session_state.mode       = data.get("mode", "dialogue")
-        st.session_state.about_val  = data.get("about", "")
+        st.session_state.messages   = db_get_messages(chat_id)
+        st.session_state.mode       = row[1]
+        st.session_state.about_val  = row[2]
         st.session_state.variations = None
-        # Re-hydrate last generated variations from messages if present
         for m in reversed(st.session_state.messages):
-            if m["role"] == "assistant" and "## VARIATION" in m["content"]:
+            if "## VARIATION" in m["content"]:
                 st.session_state.variations = parse_variations(m["content"])
                 break
-    except Exception:
-        pass
 
 def start_new_chat():
-    save_current_chat()
     st.session_state.chat_id    = str(uuid.uuid4())
     st.session_state.messages   = []
     st.session_state.variations = None
@@ -579,30 +604,31 @@ with hcol2:
         start_new_chat()
         st.rerun()
 
-st.markdown("<hr style='margin:12px 0 12px'>", unsafe_allow_html=True)
-
-# ── RECENT SESSIONS GALLERY ──
-history = get_chat_history()
-if history:
-    st.markdown('<div class="field-label">Recent Sessions</div>', unsafe_allow_html=True)
-    h_cols = st.columns(len(history[:6]))
-    for i, ch in enumerate(history[:6]):
-        with h_cols[i]:
-            is_active = ch["id"] == st.session_state.chat_id
-            border = "border: 1px solid #4f8ef7;" if is_active else "border: 1px solid #1c1f2e;"
-            mode_icon = "💬" if ch.get("mode") == "dialogue" else "📋"
-            if st.button(f"{mode_icon} {ch.get('title','Untitled')[:18]}", key=f"hist_btn_{ch['id']}", use_container_width=True, help=f"Load session from {ch.get('timestamp','')[:10]}"):
-                load_chat(ch["id"])
-                st.rerun()
-
 st.markdown("<hr style='margin:12px 0 24px'>", unsafe_allow_html=True)
 
-left, right = st.columns([1, 1], gap="large")
+# ── 3 COLUMN LAYOUT: HISTORY | INPUT | OUTCOME ──
+col_hist, col_left, col_right = st.columns([1, 2, 2], gap="large")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# LEFT COLUMN — inputs
+# COLUMN 1 — Vertical History Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
-with left:
+with col_hist:
+    st.markdown('<div class="field-label" style="color:#7a7d9a">History</div>', unsafe_allow_html=True)
+    sessions = db_get_sessions()
+    if not sessions:
+        st.markdown('<div style="font-size:0.75rem;color:#3a3d55;padding-top:10px">No history yet.</div>', unsafe_allow_html=True)
+    for s in sessions:
+        is_active = s["id"] == st.session_state.chat_id
+        icon = "💬" if s["mode"] == "dialogue" else "📋"
+        btn_style = "secondary" if not is_active else "primary"
+        if st.button(f"{icon} {s['title'][:25]}...", key=f"hist_{s['id']}", use_container_width=True, type=btn_style):
+            load_chat(s["id"])
+            st.rerun()
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COLUMN 2 — inputs
+# ─────────────────────────────────────────────────────────────────────────────
+with col_left:
     # ── ABOUT ──
     st.markdown('<div class="field-label">About — Define the Client</div>', unsafe_allow_html=True)
     about = st.text_area(
@@ -743,7 +769,13 @@ if do_generate:
             st.session_state.messages.append({"role": "user",      "content": f"[GENERATE] {combined[:100]}"})
             st.session_state.messages.append({"role": "assistant", "content": raw})
             st.session_state.variations = parse_variations(raw)
-            save_current_chat()
+            
+            # Persist to DB
+            first_user = next((m["content"] for m in st.session_state.messages if m["role"] == "user"), "New Chat")
+            title = re.sub(r'\[.*?\]', '', first_user).strip()[:60]
+            db_save_session(st.session_state.chat_id, title, st.session_state.mode, about)
+            db_save_message(st.session_state.chat_id, "user", f"[GENERATE] {combined[:100]}")
+            db_save_message(st.session_state.chat_id, "assistant", raw)
             st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -753,13 +785,14 @@ if follow_up:
     st.session_state.messages.append({"role": "user", "content": follow_up})
     bot_reply = run_chat(follow_up, about, st.session_state.mode, kb)
     st.session_state.messages.append({"role": "assistant", "content": bot_reply})
-    save_current_chat()
+    db_save_message(st.session_state.chat_id, "user", follow_up)
+    db_save_message(st.session_state.chat_id, "assistant", bot_reply)
     st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RIGHT COLUMN — outcomes / variations
+# COLUMN 3 — outcomes / variations
 # ─────────────────────────────────────────────────────────────────────────────
-with right:
+with col_right:
     mode_badge = "dialogue" if st.session_state.mode == "dialogue" else "script"
     st.markdown(f"""
     <div class="out-header">
