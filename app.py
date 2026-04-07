@@ -579,6 +579,22 @@ with hcol2:
         start_new_chat()
         st.rerun()
 
+st.markdown("<hr style='margin:12px 0 12px'>", unsafe_allow_html=True)
+
+# ── RECENT SESSIONS GALLERY ──
+history = get_chat_history()
+if history:
+    st.markdown('<div class="field-label">Recent Sessions</div>', unsafe_allow_html=True)
+    h_cols = st.columns(len(history[:6]))
+    for i, ch in enumerate(history[:6]):
+        with h_cols[i]:
+            is_active = ch["id"] == st.session_state.chat_id
+            border = "border: 1px solid #4f8ef7;" if is_active else "border: 1px solid #1c1f2e;"
+            mode_icon = "💬" if ch.get("mode") == "dialogue" else "📋"
+            if st.button(f"{mode_icon} {ch.get('title','Untitled')[:18]}", key=f"hist_btn_{ch['id']}", use_container_width=True, help=f"Load session from {ch.get('timestamp','')[:10]}"):
+                load_chat(ch["id"])
+                st.rerun()
+
 st.markdown("<hr style='margin:12px 0 24px'>", unsafe_allow_html=True)
 
 left, right = st.columns([1, 1], gap="large")
