@@ -685,14 +685,20 @@ with left:
     visible = [m for m in st.session_state.messages if not m["content"].startswith("[GENERATE")]
     
     if visible:
-        # History Navigation (Always visible if chat exists)
-        st.markdown('<div class="field-label">Conversation Navigator</div>', unsafe_allow_html=True)
-        st.session_state.history_index = st.select_slider(
-            "Nav", options=list(range(len(visible))), 
-            value=len(visible)-1 if st.session_state.history_index >= len(visible) else st.session_state.history_index,
-            label_visibility="collapsed",
-            format_func=lambda x: f"Turn {x+1}"
-        )
+        # History Navigation (Show only if there's more than 1 turn to navigate)
+        if len(visible) > 1:
+            st.markdown('<div class="field-label">Conversation Navigator</div>', unsafe_allow_html=True)
+            st.session_state.history_index = st.slider(
+                "Nav", 
+                min_value=0, 
+                max_value=len(visible)-1, 
+                value=len(visible)-1 if st.session_state.history_index >= len(visible) else st.session_state.history_index,
+                label_visibility="collapsed",
+                format_func=lambda x: f"Turn {x+1}",
+                key=f"nav_slider_{len(visible)}"
+            )
+        else:
+            st.session_state.history_index = 0
 
         # Display up to selected index
         for msg in visible[:st.session_state.history_index + 1]:
