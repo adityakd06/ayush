@@ -328,9 +328,9 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
         except ImportError:
             st.error("Model Error: 'openai' library is not installed in your venv. Run: pip install openai")
             return None
-        key = os.environ.get("OPENAI_API_KEY")
+        key = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
         if not key: 
-            st.error("Missing OPENAI_API_KEY in .env")
+            st.error("Missing OPENAI_API_KEY. Add it to Streamlit Secrets or your .env file.")
             return None
         client = openai.OpenAI(api_key=key)
         try:
@@ -349,9 +349,9 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
         except ImportError:
             st.error("Model Error: 'anthropic' library is not installed in your venv. Run: pip install anthropic")
             return None
-        key = os.environ.get("ANTHROPIC_API_KEY")
+        key = st.secrets.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
         if not key: 
-            st.error("Missing ANTHROPIC_API_KEY in .env")
+            st.error("Missing ANTHROPIC_API_KEY. Add it to Streamlit Secrets or your .env file.")
             return None
         client = anthropic.Anthropic(api_key=key)
         try:
@@ -372,9 +372,9 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
         except ImportError:
             st.error("Model Error: 'groq' library is not installed in your venv. Run: pip install groq")
             return None
-        key = os.environ.get("GROQ_API_KEY")
+        key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
         if not key: 
-            st.error("Missing GROQ_API_KEY in .env")
+            st.error("Missing GROQ_API_KEY. Add it to Streamlit Secrets or your .env file.")
             return None
         client = groq.Groq(api_key=key)
         try:
