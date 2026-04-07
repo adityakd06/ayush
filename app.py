@@ -281,6 +281,25 @@ def get_model():
         generation_config=genai.types.GenerationConfig(temperature=0.9, max_output_tokens=4096),
     )
 
+import time
+from google.api_core import exceptions
+
+def call_gemini_with_retry(func, *args, **kwargs):
+    """Retries a Gemini call on 429 errors."""
+    max_retries = 3
+    for i in range(max_retries):
+        try:
+            return func(*args, **kwargs)
+        except exceptions.ResourceExhausted as e:
+            if i < max_retries - 1:
+                wait_time = (i + 1) * 3
+                st.info(f"⏳ Rate limit hit. Retrying in {wait_time}s... (Attempt {i+1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                raise e
+        except Exception as e:
+            raise e
+
 # ── DATA HELPERS ─────────────────────────────────────────────────────────────────
 def load_kb():
     try:
@@ -423,10 +442,10 @@ Now write all 5 variations using ## VARIATION N: TITLE format. Be thorough and d
 
     try:
         with st.spinner("Generating variations…"):
-            resp = model.generate_content(prompt)
+            resp = call_gemini_with_retry(model.generate_content, prompt)
         return resp.text
-    except Exception as e:
-        st.error(f"Gemini error: {e}")
+    except exceptions.ResourceExhausted:
+        st.error("❌ Quota exceeded. Please wait a minute before trying again.")
         return None
 
 def run_chat(user_msg, about, mode, kb):
@@ -452,8 +471,10 @@ def run_chat(user_msg, about, mode, kb):
 
     try:
         with st.spinner("Thinking…"):
-            resp = chat.send_message(full_msg)
+            resp = call_gemini_with_retry(chat.send_message, full_msg)
         return resp.text
+    except exceptions.ResourceExhausted:
+        return "⚠️ Rate limit exceeded. Please wait a moment."
     except Exception as e:
         return f"Error: {e}"
 
