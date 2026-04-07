@@ -518,7 +518,7 @@ with col_left:
     context = st.text_area(
         "ctx", label_visibility="collapsed",
         value=st.session_state.context_text, height=220,
-        placeholder="Paste the customer–bot conversation transcript here…\n\nExample:\nAgent: Hello, am I speaking with Rahul ji?\nCustomer: Haan, kaun bol raha hai?\nAgent: Main ABHI se call kar rahi hoon…\nCustomer: Mujhe interest nahi.",
+        placeholder="It tells the AI exactly what has already been said in the conversation.",
         key="ctx_input",
     )
     st.session_state.context_text = context
