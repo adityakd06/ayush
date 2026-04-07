@@ -524,7 +524,7 @@ with st.sidebar:
 
     # Chat History
     st.markdown('<div class="sb-section-label">Chat History</div>', unsafe_allow_html=True)
-    history = get_chat_history()
+    history = db_get_sessions()
     if not history:
         st.markdown('<div style="padding:8px 18px;font-size:0.78rem;color:#3a3d55">No chats yet. Start typing!</div>', unsafe_allow_html=True)
     else:
