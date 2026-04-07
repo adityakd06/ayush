@@ -2,9 +2,6 @@ import json, os, uuid, re, sqlite3, time
 from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
-import openai
-import anthropic
-import groq
 from google.api_core import exceptions as google_exceptions
 
 # Load local .env
@@ -324,6 +321,11 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
             return None
 
     elif provider == "OpenAI":
+        try:
+            import openai
+        except ImportError:
+            st.error("Model Error: 'openai' library is not installed in your venv. Run: pip install openai")
+            return None
         key = os.environ.get("OPENAI_API_KEY")
         if not key: 
             st.error("Missing OPENAI_API_KEY in .env")
@@ -340,6 +342,11 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
             return None
 
     elif provider == "Claude":
+        try:
+            import anthropic
+        except ImportError:
+            st.error("Model Error: 'anthropic' library is not installed in your venv. Run: pip install anthropic")
+            return None
         key = os.environ.get("ANTHROPIC_API_KEY")
         if not key: 
             st.error("Missing ANTHROPIC_API_KEY in .env")
@@ -358,6 +365,11 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
             return None
 
     elif provider == "Groq/Meta":
+        try:
+            import groq
+        except ImportError:
+            st.error("Model Error: 'groq' library is not installed in your venv. Run: pip install groq")
+            return None
         key = os.environ.get("GROQ_API_KEY")
         if not key: 
             st.error("Missing GROQ_API_KEY in .env")
