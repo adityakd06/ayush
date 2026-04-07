@@ -565,10 +565,21 @@ with st.sidebar:
                     kb["dialogues"] = [x for x in kb["dialogues"] if x["id"] != d["id"]]
                     save_kb(kb); st.rerun()
 
-# ════════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
 # MAIN — two-column layout matching the sketch
-# ════════════════════════════════════════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
 kb = load_kb()
+
+# ── HEADER ──
+hcol1, hcol2 = st.columns([5, 1])
+with hcol1:
+    st.markdown('<h1 style="font-family:\'Syne\',sans-serif;font-size:1.4rem;margin:0">DialogueBot · ABHI Optimizer</h1>', unsafe_allow_html=True)
+with hcol2:
+    if st.button("＋ New Chat", use_container_width=True, type="primary", key="main_new"):
+        start_new_chat()
+        st.rerun()
+
+st.markdown("<hr style='margin:12px 0 24px'>", unsafe_allow_html=True)
 
 left, right = st.columns([1, 1], gap="large")
 
@@ -658,14 +669,14 @@ with left:
     visible = [m for m in st.session_state.messages if not m["content"].startswith("[GENERATE")]
     
     if visible:
-        # History Slider
-        if len(visible) > 1:
-            st.session_state.history_index = st.slider(
-                "Navigate History", 0, len(visible) - 1, len(visible) - 1,
-                label_visibility="collapsed", help="Slide to review previous turns."
-            )
-        else:
-            st.session_state.history_index = 0
+        # History Navigation (Always visible if chat exists)
+        st.markdown('<div class="field-label">Conversation Navigator</div>', unsafe_allow_html=True)
+        st.session_state.history_index = st.select_slider(
+            "Nav", options=list(range(len(visible))), 
+            value=len(visible)-1 if st.session_state.history_index >= len(visible) else st.session_state.history_index,
+            label_visibility="collapsed",
+            format_func=lambda x: f"Turn {x+1}"
+        )
 
         # Display up to selected index
         for msg in visible[:st.session_state.history_index + 1]:
