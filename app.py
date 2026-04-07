@@ -243,6 +243,25 @@ ss("history_index", 0)
 ss("pending_new_chat", False)
 
 # ── GEMINI ────────────────────────────────────────────────────────────────────────
+@st.cache_data(show_spinner=False)
+def discover_best_model(api_key):
+    """List available models and pick the best one. Cached by API key."""
+    try:
+        genai.configure(api_key=api_key)
+        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
+        
+        # Priority list
+        priorities = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
+        for p in priorities:
+            if p in models: return p
+            
+        # Fallback
+        for m in models:
+            if "gemini" in m.lower(): return m
+        return models[0] if models else "models/gemini-1.5-flash"
+    except Exception:
+        return "models/gemini-1.5-flash"
+
 @st.cache_resource
 def get_model():
     # Search priority: st.secrets -> os.environ (includes .env)
@@ -252,9 +271,13 @@ def get_model():
     
     if not key:
         return None
+    
+    # Configure and pick the best model for this key
+    best_model = discover_best_model(key)
     genai.configure(api_key=key)
+    
     return genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name=best_model,
         generation_config=genai.types.GenerationConfig(temperature=0.9, max_output_tokens=4096),
     )
 
