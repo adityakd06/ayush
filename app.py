@@ -688,14 +688,14 @@ with left:
         # History Navigation (Show only if there's more than 1 turn to navigate)
         if len(visible) > 1:
             st.markdown('<div class="field-label">Conversation Navigator</div>', unsafe_allow_html=True)
-            st.session_state.history_index = st.slider(
+            opts = list(range(len(visible)))
+            st.session_state.history_index = st.select_slider(
                 "Nav", 
-                min_value=0, 
-                max_value=len(visible)-1, 
-                value=len(visible)-1 if st.session_state.history_index >= len(visible) else st.session_state.history_index,
+                options=opts,
+                value=st.session_state.history_index if st.session_state.history_index < len(visible) else len(visible)-1,
                 label_visibility="collapsed",
                 format_func=lambda x: f"Turn {x+1}",
-                key=f"nav_slider_{len(visible)}"
+                key=f"nav_select_{st.session_state.chat_id}_{len(visible)}"
             )
         else:
             st.session_state.history_index = 0
