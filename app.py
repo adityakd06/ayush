@@ -25,13 +25,21 @@ DB_PATH = DATA_DIR / "dialogue_store.db"
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    # Sessions table
-    c.execute("""CREATE TABLE IF NOT EXISTS sessions (
+    # Clients table
+    c.execute("""CREATE TABLE IF NOT EXISTS clients (
         id TEXT PRIMARY KEY,
-        title TEXT,
-        mode TEXT,
+        name TEXT,
         about TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""")
+    # Sessions table (now with client_id)
+    c.execute("""CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        client_id TEXT,
+        title TEXT,
+        mode TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
     )""")
     # Messages table
     c.execute("""CREATE TABLE IF NOT EXISTS messages (
@@ -42,6 +50,23 @@ def init_db():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
     )""")
+    # Knowledge Base table (moved to DB)
+    c.execute("""CREATE TABLE IF NOT EXISTS knowledge_base (
+        id TEXT PRIMARY KEY,
+        client_id TEXT,
+        type TEXT, -- 'script' | 'dialogue'
+        name TEXT,
+        content TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+    )""")
+    
+    # Pre-seed ABHI if empty
+    c.execute("SELECT COUNT(*) FROM clients")
+    if c.fetchone()[0] == 0:
+        c.execute("INSERT INTO clients (id, name, about) VALUES (?, ?, ?)", 
+                  ("abhi-id", "Aditya Birla Health Insurance (ABHI)", "Aditya Birla Health Insurance Co. Limited (ABHI) is a provider of health insurance products in India."))
+    
     conn.commit()
     conn.close()
 
@@ -258,15 +283,15 @@ def ss(key, val):
         st.session_state[key] = val
 
 ss("chat_id",    str(uuid.uuid4()))
-ss("messages",   [])          # full conversation log
-ss("mode",       "dialogue")  # "dialogue" | "script"
-ss("variations", None)        # parsed list of dicts
+ss("messages",   [])
+ss("client_id",  "abhi-id")
+ss("mode",       "dialogue")
+ss("variations", None)
 ss("about_val",  "")
 ss("instr_val",  "")
 ss("lang_val",   "Hinglish (Hindi + English)")
 ss("history_index", 0)
 ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq
-ss("llm_model",    "gemini-1.5-flash")
 ss("pending_new_chat", False)
 
 # ── GEMINI ────────────────────────────────────────────────────────────────────────
@@ -407,11 +432,35 @@ def call_gemini_with_retry(func, *args, **kwargs):
 
 # ── DATA HELPERS ─────────────────────────────────────────────────────────────────
 # ── DATABASE HELPERS ────────────────────────────────────────────────────────────
-def db_save_session(sid, title, mode, about):
+def db_get_clients():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO sessions (id, title, mode, about) VALUES (?, ?, ?, ?)",
-              (sid, title, mode, about))
+    c.execute("SELECT id, name, about FROM clients ORDER BY name ASC")
+    rows = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "about": r[2]} for r in rows]
+
+def db_add_client(name, about=""):
+    cid = str(uuid.uuid4())
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO clients (id, name, about) VALUES (?, ?, ?)", (cid, name, about))
+    conn.commit()
+    conn.close()
+    return cid
+
+def db_update_client_about(cid, about):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("UPDATE clients SET about = ? WHERE id = ?", (about, cid))
+    conn.commit()
+    conn.close()
+
+def db_save_session(sid, cid, title, mode):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO sessions (id, client_id, title, mode) VALUES (?, ?, ?, ?)",
+              (sid, cid, title, mode))
     conn.commit()
     conn.close()
 
@@ -423,10 +472,10 @@ def db_save_message(sid, role, content):
     conn.commit()
     conn.close()
 
-def db_get_sessions():
+def db_get_sessions(cid):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT id, title, mode, timestamp FROM sessions ORDER BY timestamp DESC LIMIT 15")
+    c.execute("SELECT id, title, mode, timestamp FROM sessions WHERE client_id = ? ORDER BY timestamp DESC LIMIT 15", (cid,))
     rows = c.fetchall()
     conn.close()
     return [{"id": r[0], "title": r[1], "mode": r[2], "timestamp": r[3]} for r in rows]
@@ -439,30 +488,40 @@ def db_get_messages(sid):
     conn.close()
     return [{"role": r[0], "content": r[1]} for r in rows]
 
-def load_kb():
-    try:
-        return json.loads(KB_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {"scripts": [], "dialogues": []}
+def db_kb_save(cid, type, name, content):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT INTO knowledge_base (id, client_id, type, name, content) VALUES (?, ?, ?, ?, ?)",
+              (str(uuid.uuid4()), cid, type, name, content))
+    conn.commit()
+    conn.close()
 
-def save_kb(kb):
-    try:
-        KB_FILE.write_text(json.dumps(kb, indent=2, ensure_ascii=False))
-        return True
-    except Exception:
-        return False
+def db_kb_get(cid, type):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT id, name, content FROM knowledge_base WHERE client_id = ? AND type = ? ORDER BY timestamp DESC", (cid, type))
+    rows = c.fetchall()
+    conn.close()
+    return [{"id": r[0], "name": r[1], "content": r[2]} for r in rows]
+
+def db_kb_delete(pk):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM knowledge_base WHERE id = ?", (pk,))
+    conn.commit()
+    conn.close()
 
 def load_chat(chat_id):
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
-    c.execute("SELECT title, mode, about FROM sessions WHERE id = ?", (chat_id,))
+    c.execute("SELECT title, mode, client_id FROM sessions WHERE id = ?", (chat_id,))
     row = c.fetchone()
     conn.close()
     if row:
         st.session_state.chat_id    = chat_id
         st.session_state.messages   = db_get_messages(chat_id)
         st.session_state.mode       = row[1]
-        st.session_state.about_val  = row[2]
+        st.session_state.client_id  = row[2]
         st.session_state.variations = None
         for m in reversed(st.session_state.messages):
             if "## VARIATION" in m["content"]:
@@ -586,47 +645,42 @@ with st.sidebar:
     st.markdown("<hr>", unsafe_allow_html=True)
 
     # Knowledge Base
-    st.markdown('<div class="sb-section-label">Knowledge Base</div>', unsafe_allow_html=True)
-    kb = load_kb()
+    st.markdown('<div class="sb-section-label">Client Intelligence</div>', unsafe_allow_html=True)
     kb_tab1, kb_tab2 = st.tabs(["📋 Scripts", "💬 Dialogues"])
 
     with kb_tab1:
-        st.caption(f"{len(kb['scripts'])} saved")
+        scripts = db_kb_get(st.session_state.client_id, "script")
+        st.caption(f"{len(scripts)} saved for this client")
         with st.expander("＋ Add Script"):
-            sn = st.text_input("Name", key="sn", placeholder="e.g. Customer Regain v3")
+            sn = st.text_input("Name", key="sn", placeholder="e.g. Intro Pitch")
             sc = st.text_area("Content", key="sc", height=100)
             if st.button("Save", key="btn_ks"):
                 if sc.strip():
-                    kb["scripts"].append({"id": str(uuid.uuid4()), "name": sn or f"Script {len(kb['scripts'])+1}", "content": sc.strip(), "added": datetime.now().isoformat()})
-                    if save_kb(kb):
-                        st.success("Saved!")
-                        st.rerun()
-        for i, s in enumerate(kb["scripts"][-6:]):
+                    db_kb_save(st.session_state.client_id, "script", sn or "New Script", sc.strip())
+                    st.success("Saved!"); st.rerun()
+        for i, s in enumerate(scripts[:8]):
             c1, c2 = st.columns([5, 1])
             with c1: st.markdown(f'<div class="kb-chip">📄 {s["name"][:30]}</div>', unsafe_allow_html=True)
             with c2:
                 if st.button("×", key=f"ks_{i}"):
-                    kb["scripts"] = [x for x in kb["scripts"] if x["id"] != s["id"]]
-                    save_kb(kb); st.rerun()
+                    db_kb_delete(s["id"]); st.rerun()
 
     with kb_tab2:
-        st.caption(f"{len(kb['dialogues'])} saved")
+        dialogues = db_kb_get(st.session_state.client_id, "dialogue")
+        st.caption(f"{len(dialogues)} saved for this client")
         with st.expander("＋ Add Dialogue"):
-            dn = st.text_input("Name", key="dn", placeholder="e.g. Objection — Already Insured")
+            dn = st.text_input("Name", key="dn", placeholder="e.g. Closing Script")
             dc = st.text_area("Content", key="dc", height=100)
             if st.button("Save", key="btn_kd"):
                 if dc.strip():
-                    kb["dialogues"].append({"id": str(uuid.uuid4()), "name": dn or f"Dialogue {len(kb['dialogues'])+1}", "content": dc.strip(), "added": datetime.now().isoformat()})
-                    if save_kb(kb):
-                        st.success("Saved!")
-                        st.rerun()
-        for i, d in enumerate(kb["dialogues"][-6:]):
+                    db_kb_save(st.session_state.client_id, "dialogue", dn or "New Dialogue", dc.strip())
+                    st.success("Saved!"); st.rerun()
+        for i, d in enumerate(dialogues[:8]):
             c1, c2 = st.columns([5, 1])
             with c1: st.markdown(f'<div class="kb-chip">💬 {d["name"][:30]}</div>', unsafe_allow_html=True)
             with c2:
                 if st.button("×", key=f"kd_{i}"):
-                    kb["dialogues"] = [x for x in kb["dialogues"] if x["id"] != d["id"]]
-                    save_kb(kb); st.rerun()
+                    db_kb_delete(d["id"]); st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN — two-column layout matching the sketch
@@ -634,9 +688,42 @@ with st.sidebar:
 kb = load_kb()
 
 # ── HEADER ──
-hcol1, hcolM, hcol2 = st.columns([3, 2, 1])
+hcol1, hcol_client, hcolM, hcol2 = st.columns([2.5, 2, 2, 1])
 with hcol1:
-    st.markdown('<h1 style="font-family:\'Syne\',sans-serif;font-size:1.4rem;margin:0">DialogueBot · ABHI Optimizer</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="font-family:\'Syne\',sans-serif;font-size:1.4rem;margin:0">DialogueBot · Platform</h1>', unsafe_allow_html=True)
+
+with hcol_client:
+    # Client Selector List
+    all_clients = db_get_clients()
+    client_names = [c["name"] for c in all_clients] + ["＋ Add New Client"]
+    current_idx = 0
+    for i, c in enumerate(all_clients):
+        if c["id"] == st.session_state.client_id:
+            current_idx = i
+            # Load client about into state if changed
+            st.session_state.about_val = c["about"]
+            break
+            
+    selected_client_name = st.selectbox(
+        "Client", options=client_names, index=current_idx, label_visibility="collapsed"
+    )
+    
+    if selected_client_name == "＋ Add New Client":
+        with st.popover("Create New Client"):
+            new_name = st.text_input("Brand Name", placeholder="e.g. LIC Insurance")
+            new_about = st.text_area("Initial Context", placeholder="Describe the company...")
+            if st.button("Create Client"):
+                if new_name.strip():
+                    new_id = db_add_client(new_name, new_about)
+                    st.session_state.client_id = new_id
+                    st.rerun()
+    else:
+        # Switch client if changed
+        new_cid = next(c["id"] for c in all_clients if c["name"] == selected_client_name)
+        if new_cid != st.session_state.client_id:
+            st.session_state.client_id = new_cid
+            st.rerun()
+
 with hcolM:
     st.session_state.llm_provider = st.selectbox(
         "Model Selector",
@@ -658,10 +745,10 @@ col_hist, col_left, col_right = st.columns([1, 2, 2], gap="large")
 # COLUMN 1 — Vertical History Sidebar
 # ─────────────────────────────────────────────────────────────────────────────
 with col_hist:
-    st.markdown('<div class="field-label" style="color:#7a7d9a">History</div>', unsafe_allow_html=True)
-    sessions = db_get_sessions()
+    st.markdown('<div class="field-label" style="color:#7a7d9a">Session History</div>', unsafe_allow_html=True)
+    sessions = db_get_sessions(st.session_state.client_id)
     if not sessions:
-        st.markdown('<div style="font-size:0.75rem;color:#3a3d55;padding-top:10px">No history yet.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="font-size:0.75rem;color:#3a3d55;padding-top:10px">No history for this client.</div>', unsafe_allow_html=True)
     for s in sessions:
         is_active = s["id"] == st.session_state.chat_id
         icon = "💬" if s["mode"] == "dialogue" else "📋"
