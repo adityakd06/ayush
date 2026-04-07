@@ -50,17 +50,25 @@ def init_db():
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
     )""")
-    # Knowledge Base table (moved to DB)
-    c.execute("""CREATE TABLE IF NOT EXISTS knowledge_base (
-        id TEXT PRIMARY KEY,
-        client_id TEXT,
-        type TEXT, -- 'script' | 'dialogue'
-        name TEXT,
-        content TEXT,
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
-    )""")
+    # Migrate old DB if necessary
+    try:
+        c.execute("ALTER TABLE sessions ADD COLUMN client_id TEXT")
+    except sqlite3.OperationalError:
+        pass # already exists
     
+    try:
+        c.execute("""CREATE TABLE IF NOT EXISTS knowledge_base (
+            id TEXT PRIMARY KEY,
+            client_id TEXT,
+            type TEXT,
+            name TEXT,
+            content TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(client_id) REFERENCES clients(id) ON DELETE CASCADE
+        )""")
+    except Exception:
+        pass
+
     # Pre-seed ABHI if empty
     c.execute("SELECT COUNT(*) FROM clients")
     if c.fetchone()[0] == 0:
