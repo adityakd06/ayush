@@ -412,7 +412,7 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
         client = groq.Groq(api_key=key)
         try:
             resp = client.chat.completions.create(
-                model="llama3-70b-8192",
+                model="llama-3.3-70b-versatile",
                 messages=[{"role":"system","content":system_prompt}, {"role":"user","content":user_prompt}]
             )
             return resp.choices[0].message.content
