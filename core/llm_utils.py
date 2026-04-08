@@ -15,14 +15,14 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
         # Auto-discover the best model available for this key (Prioritizing 2.5 and 3.1)
         try:
             available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            # Preference order (Updated with your advanced tier models)
+            # Preference order (Prioritizing Flash for better free tier quota)
             pref = [
-                "models/gemini-3.1-pro-preview", 
-                "models/gemini-2.5-pro", 
                 "models/gemini-2.5-flash", 
                 "models/gemini-2.0-flash",
+                "models/gemini-1.5-flash",
+                "models/gemini-2.5-pro", 
                 "models/gemini-1.5-pro",
-                "models/gemini-1.5-flash"
+                "models/gemini-pro"
             ]
             
             best = "gemini-pro" # fallback
