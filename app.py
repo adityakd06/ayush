@@ -299,7 +299,7 @@ ss("about_val",  "")
 ss("instr_val",  "")
 ss("lang_val",   "Hinglish (Hindi + English)")
 ss("history_index", 0)
-ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq
+ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq | Cohere
 ss("pending_new_chat", False)
 
 # ── GEMINI ────────────────────────────────────────────────────────────────────────
@@ -418,6 +418,27 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
             return resp.choices[0].message.content
         except Exception as e:
             st.error(f"Groq Error: {e}")
+            return None
+
+    elif provider == "Cohere":
+        try:
+            import cohere
+        except ImportError:
+            st.error("Model Error: 'cohere' library is not installed in your venv. Run: pip install cohere")
+            return None
+        key = st.secrets.get("COHERE_API_KEY") or os.environ.get("COHERE_API_KEY")
+        if not key:
+            st.error("Missing COHERE_API_KEY. Add it to Streamlit Secrets or your .env file.")
+            return None
+        client = cohere.Client(api_key=key)
+        try:
+            resp = client.chat(
+                message=f"{system_prompt}\n\n{user_prompt}",
+                model="command-r-plus"
+            )
+            return resp.text
+        except Exception as e:
+            st.error(f"Cohere Error: {e}")
             return None
     
     return None
@@ -738,8 +759,8 @@ with hcol_client:
 with hcolM:
     st.session_state.llm_provider = st.selectbox(
         "Model Selector",
-        options=["Gemini", "OpenAI", "Claude", "Groq/Meta"],
-        index=["Gemini", "OpenAI", "Claude", "Groq/Meta"].index(st.session_state.llm_provider),
+        options=["Gemini", "OpenAI", "Claude", "Groq/Meta", "Cohere"],
+        index=["Gemini", "OpenAI", "Claude", "Groq/Meta", "Cohere"].index(st.session_state.llm_provider),
         label_visibility="collapsed"
     )
 with hcol2:
