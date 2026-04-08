@@ -29,7 +29,13 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
         try:
             resp = model.generate_content(user_prompt)
             return resp.text
-        except Exception as e: return f"Gemini Error: {e}"
+        except Exception as e:
+            # Diagnostic: list ALL models so user can tell us what they see
+            try:
+                all_m = [m.name for m in genai.list_models()]
+                return f"Gemini Error (404/Not Found): Models available to your key: {all_m}. Error Details: {e}"
+            except:
+                return f"Gemini Error: {e}"
 
     # ── OPENAI ──
     elif provider == "OpenAI":
