@@ -12,12 +12,20 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
         key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key: return "Error: Missing Google/Gemini API Key."
         genai.configure(api_key=key)
-        # Auto-discover the best model available for this key
+        # Auto-discover the best model available for this key (Prioritizing 2.5 and 3.1)
         try:
             available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            # Preference order
-            pref = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro", "models/gemini-1.0-pro"]
-            best = "gemini-pro" # default fallback
+            # Preference order (Updated with your advanced tier models)
+            pref = [
+                "models/gemini-3.1-pro-preview", 
+                "models/gemini-2.5-pro", 
+                "models/gemini-2.5-flash", 
+                "models/gemini-2.0-flash",
+                "models/gemini-1.5-pro",
+                "models/gemini-1.5-flash"
+            ]
+            
+            best = "gemini-pro" # fallback
             for p in pref:
                 if p in available:
                     best = p
@@ -30,12 +38,7 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
             resp = model.generate_content(user_prompt)
             return resp.text
         except Exception as e:
-            # Diagnostic: list ALL models so user can tell us what they see
-            try:
-                all_m = [m.name for m in genai.list_models()]
-                return f"Gemini Error (404/Not Found): Models available to your key: {all_m}. Error Details: {e}"
-            except:
-                return f"Gemini Error: {e}"
+            return f"Gemini Error: {e}"
 
     # ── OPENAI ──
     elif provider == "OpenAI":
