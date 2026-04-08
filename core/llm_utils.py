@@ -1,44 +1,62 @@
 import os
 import streamlit as st
+import time
 
 def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
     """Centralized LLM request handler for all 7 providers."""
     
-    # ── GOOGLE GEMINI ──
+    # ── GOOGLE GEMINI (With Auto-Failover Logic) ──
     if provider == "Gemini":
         try:
             import google.generativeai as genai
+            from google.api_core import exceptions as google_exceptions
         except ImportError: return "Model Error: 'google-generativeai' not installed."
+        
         key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key: return "Error: Missing Google/Gemini API Key."
-        genai.configure(api_key=key)
-        # Auto-discover the best model available for this key (Prioritizing 2.5 and 3.1)
-        try:
-            available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            # Preference order (Prioritizing Flash for better free tier quota)
-            pref = [
-                "models/gemini-2.5-flash", 
-                "models/gemini-2.0-flash",
-                "models/gemini-1.5-flash",
-                "models/gemini-2.5-pro", 
-                "models/gemini-1.5-pro",
-                "models/gemini-pro"
-            ]
-            
-            best = "gemini-pro" # fallback
-            for p in pref:
-                if p in available:
-                    best = p
-                    break
-            model = genai.GenerativeModel(best, system_instruction=system_prompt)
-        except:
-            model = genai.GenerativeModel('gemini-pro', system_instruction=system_prompt)
         
+        genai.configure(api_key=key)
+        
+        # 1. Get all models that support generation
         try:
-            resp = model.generate_content(user_prompt)
-            return resp.text
+            all_available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
         except Exception as e:
-            return f"Gemini Error: {e}"
+            return f"Gemini Error (Listing Models): {e}"
+
+        # 2. Define priority hierarchy (Prioritizing Flash for best quota availability)
+        priority_map = [
+            "models/gemini-2.5-flash", 
+            "models/gemini-2.0-flash",
+            "models/gemini-1.5-flash",
+            "models/gemini-flash-latest",
+            "models/gemini-2.5-pro", 
+            "models/gemini-1.5-pro",
+            "models/gemini-pro"
+        ]
+        
+        # Filter available models by our priority list
+        to_try = [p for p in priority_map if p in all_available]
+        # Add any other available models that weren't in our map, just in case
+        for m in all_available:
+            if m not in to_try: to_try.append(m)
+
+        # 3. Sequential Execution Loop (The "One-Shot Fix")
+        last_error = "No supported models found."
+        for model_name in to_try:
+            try:
+                model = genai.GenerativeModel(model_name, system_instruction=system_prompt)
+                resp = model.generate_content(user_prompt)
+                if resp and resp.text:
+                    return resp.text
+            except (google_exceptions.ResourceExhausted, google_exceptions.InvalidArgument, google_exceptions.NotFound) as e:
+                # Capture 429s (Quota), 400s (Unsupported), 404s (Not Found)
+                last_error = f"Model {model_name} failed (Quota/Found). Trying next... ({e})"
+                continue # Try next model
+            except Exception as e:
+                # Critical logic error or API issue
+                return f"Gemini Critical Error ({model_name}): {e}"
+        
+        return f"Gemini Error: Exhausted all available models. Last error: {last_error}"
 
     # ── OPENAI ──
     elif provider == "OpenAI":
