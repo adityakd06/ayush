@@ -299,7 +299,7 @@ ss("about_val",  "")
 ss("instr_val",  "")
 ss("lang_val",   "Hinglish (Hindi + English)")
 ss("history_index", 0)
-ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq | Cohere
+ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq | Cohere | Mistral | HuggingFace
 ss("pending_new_chat", False)
 
 # ── GEMINI ────────────────────────────────────────────────────────────────────────
@@ -439,6 +439,52 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
             return resp.text
         except Exception as e:
             st.error(f"Cohere Error: {e}")
+            return None
+
+    elif provider == "Mistral":
+        try:
+            import mistralai
+            from mistralai.client import MistralClient
+            from mistralai.models.chat_completion import ChatMessage
+        except ImportError:
+            st.error("Model Error: 'mistralai' library is not installed. Run: pip install mistralai")
+            return None
+        key = st.secrets.get("MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
+        if not key:
+            st.error("Missing MISTRAL_API_KEY.")
+            return None
+        client = MistralClient(api_key=key)
+        try:
+            resp = client.chat(
+                model="mistral-large-latest",
+                messages=[ChatMessage(role="system", content=system_prompt), ChatMessage(role="user", content=user_prompt)]
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            st.error(f"Mistral Error: {e}")
+            return None
+
+    elif provider == "HuggingFace":
+        try:
+            from huggingface_hub import InferenceClient
+        except ImportError:
+            st.error("Model Error: 'huggingface_hub' not installed. Run: pip install huggingface_hub")
+            return None
+        key = st.secrets.get("HF_API_KEY") or st.secrets.get("HUGGINGFACE_API_KEY") or os.environ.get("HF_API_KEY")
+        if not key:
+            st.error("Missing HF_API_KEY.")
+            return None
+        client = InferenceClient(api_key=key)
+        try:
+            # Using Qwen2.5-72B-Instruct as a high-quality default open source model
+            resp = client.chat_completion(
+                model="Qwen/Qwen2.5-72B-Instruct",
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                max_tokens=4096
+            )
+            return resp.choices[0].message.content
+        except Exception as e:
+            st.error(f"Hugging Face Error: {e}")
             return None
     
     return None
@@ -759,8 +805,8 @@ with hcol_client:
 with hcolM:
     st.session_state.llm_provider = st.selectbox(
         "Model Selector",
-        options=["Gemini", "OpenAI", "Claude", "Groq/Meta", "Cohere"],
-        index=["Gemini", "OpenAI", "Claude", "Groq/Meta", "Cohere"].index(st.session_state.llm_provider),
+        options=["Gemini", "OpenAI", "Claude", "Groq/Meta", "Cohere", "Mistral", "HuggingFace"],
+        index=["Gemini", "OpenAI", "Claude", "Groq/Meta", "Cohere", "Mistral", "HuggingFace"].index(st.session_state.llm_provider),
         label_visibility="collapsed"
     )
 with hcol2:
