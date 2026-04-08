@@ -8,6 +8,7 @@ from google.api_core import exceptions as google_exceptions
 
 # Load local .env
 load_dotenv()
+from core.graph_engine import app_graph
 
 # ── MUST BE FIRST ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -683,11 +684,44 @@ OUTPUT RULES — follow these exactly:
 3. Use [STEP_X] labels, → arrows for branching, {{{{placeholders}}}}.
 4. Each script must be directly implementable in a voice AI pipeline."""
 
-# ── AI GENERATE ───────────────────────────────────────────────────────────────────
+# ── AI GENERATE (AGENTIC VIA LANGGRAPH) ──────────────────────────────────────────
 def run_generate(about, instructions, mode, language):
-    system = build_system(mode, about)
-    prompt = f"LANGUAGE: {language}\n\n{instructions if instructions.strip() else 'Generate variations.'}"
-    return run_llm_request(system, prompt)
+    # Prepare initial state for LangGraph
+    master = ""
+    try: master = MASTER_PROMPT_PATH.read_text(encoding="utf-8")
+    except: pass
+    
+    # Pre-fetch KB for the Researcher Node
+    kb_data = ""
+    items_db = db_kb_get(st.session_state.client_id, "dialogue" if mode == "dialogue" else "script")
+    if items_db:
+        kb_data = "\n\n---\n".join(f"[{d['name']}]\n{d['content']}" for d in items_db[:5])
+
+    initial_state = {
+        "client_id": st.session_state.client_id,
+        "about": about,
+        "instructions": instructions,
+        "mode": mode,
+        "language": language,
+        "provider": st.session_state.llm_provider,
+        "master_prompt": master,
+        "kb_context": kb_data,
+        "draft": "",
+        "audit_notes": "",
+        "revision_count": 0,
+        "final_output": ""
+    }
+
+    # Execute the Graph
+    final_state = app_graph.invoke(initial_state)
+    
+    # If the graph output is empty, we fall back to a direct call as a safety measure
+    if not final_state.get("final_output"):
+        system = build_system(mode, about)
+        prompt = f"LANGUAGE: {language}\n\n{instructions if instructions.strip() else 'Generate variations.'}"
+        return run_llm_request(system, prompt)
+    
+    return final_state["final_output"]
 
 def run_chat(user_msg, about, mode):
     system = build_system(mode, about)
