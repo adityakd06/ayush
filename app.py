@@ -93,92 +93,93 @@ if not KB_FILE.exists():
 # ── CSS ──────────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+
+:root {
+    --bg-primary: #0a0a0b;
+    --bg-secondary: #0f1115;
+    --bg-tertiary: #161a23;
+    --accent-blue: #4f8ef7;
+    --accent-green: #34c77b;
+    --text-main: #e2e4ed;
+    --text-dim: #7a7d9a;
+    --border-color: #1c1f2e;
+    --glass-bg: rgba(15, 17, 23, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.08);
+}
 
 *, html, body { font-family: 'Inter', sans-serif; box-sizing: border-box; }
 #MainMenu, footer, header { visibility: hidden; }
-.stApp { background: #0b0c10; color: #e2e4ed; }
+.stApp { background: var(--bg-primary); color: var(--text-main); }
 
 /* ── Sidebar ── */
 [data-testid="stSidebar"] {
-    background: #0f1117 !important;
-    border-right: 1px solid #1c1f2e;
+    background: var(--bg-secondary) !important;
+    border-right: 1px solid var(--border-color);
     padding-top: 0 !important;
 }
 [data-testid="stSidebar"] > div { padding: 0 !important; }
 
 .sb-logo {
-    padding: 22px 18px 14px;
-    border-bottom: 1px solid #1c1f2e;
+    padding: 30px 24px 20px;
+    border-bottom: 1px solid var(--border-color);
 }
 .sb-logo-text {
-    font-family: 'Syne', sans-serif;
-    font-size: 1.15rem; font-weight: 800;
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.4rem; font-weight: 700;
+    letter-spacing: -0.02em;
     background: linear-gradient(135deg, #4f8ef7, #34c77b);
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
 }
-.sb-logo-sub { font-size: 0.72rem; color: #454860; margin-top: 2px; }
+.sb-logo-sub { font-size: 0.75rem; color: var(--text-dim); margin-top: 2px; font-weight: 500; }
 
-.sb-new-chat {
-    margin: 14px 14px 10px;
-}
+.sb-new-chat { margin: 20px 20px 10px; }
 
 .sb-section-label {
-    font-size: 0.68rem; font-weight: 600; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #3a3d55;
-    padding: 10px 18px 6px;
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #454860;
+    padding: 24px 24px 8px;
 }
 
 .hist-card {
-    margin: 3px 10px;
-    padding: 9px 12px;
-    border-radius: 8px;
+    margin: 4px 14px;
+    padding: 12px 16px;
+    border-radius: 10px;
     border: 1px solid transparent;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.2s ease;
     background: transparent;
 }
-.hist-card:hover { background: #14172a; border-color: #1c1f2e; }
-.hist-card.active { background: #14172a; border-color: #2a2f50; }
-.hist-card-title { font-size: 0.8rem; font-weight: 500; color: #b0b3c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hist-card-meta  { font-size: 0.68rem; color: #3a3d55; margin-top: 2px; }
+.hist-card:hover { background: var(--bg-tertiary); border-color: var(--border-color); }
+.hist-card.active { background: var(--bg-tertiary); border-color: var(--accent-blue); }
+.hist-card-title { font-size: 0.85rem; font-weight: 500; color: #b0b3c8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hist-card-meta  { font-size: 0.72rem; color: #3a3d55; margin-top: 4px; }
 
 /* ── Main layout ── */
-.col-input  { padding-right: 16px; border-right: 1px solid #1c1f2e; }
+.col-input  { padding-right: 16px; border-right: 1px solid var(--border-color); }
 .col-output { padding-left: 16px; }
 
 /* ── Section labels ── */
 .field-label {
-    font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em;
-    text-transform: uppercase; color: #4f8ef7;
-    margin-bottom: 6px; margin-top: 18px;
+    font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--accent-blue);
+    margin-bottom: 8px; margin-top: 24px;
 }
 .field-label:first-child { margin-top: 0; }
-
-/* ── Mode pills ── */
-.mode-row { display: flex; gap: 8px; margin-bottom: 4px; }
-.mode-pill {
-    padding: 5px 14px; border-radius: 999px; font-size: 0.75rem;
-    font-weight: 600; cursor: pointer; border: 1px solid #2a2f50;
-    background: #14172a; color: #7a7d9a; transition: all 0.15s;
-    display: inline-block;
-}
-.mode-pill.active-d { background: #1a2a50; color: #4f8ef7; border-color: #3a5090; }
-.mode-pill.active-s { background: #1a2a20; color: #34c77b; border-color: #2a5040; }
 
 /* ── Inputs ── */
 .stTextArea textarea, .stTextInput input {
     background: #13151f !important;
     border: 1px solid #1e2235 !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     color: #e2e4ed !important;
-    font-size: 0.88rem !important;
+    font-size: 0.9rem !important;
     line-height: 1.6 !important;
-    resize: vertical !important;
+    padding: 12px 16px !important;
 }
 .stTextArea textarea:focus, .stTextInput input:focus {
-    border-color: #4f8ef7 !important;
-    box-shadow: 0 0 0 2px rgba(79,142,247,0.12) !important;
+    border-color: var(--accent-blue) !important;
+    box-shadow: 0 0 0 2px rgba(79,142,247,0.15) !important;
 }
 .stTextArea label, .stTextInput label, .stSelectbox label {
     display: none !important;
@@ -188,29 +189,29 @@ st.markdown("""
 [data-testid="stSelectbox"] > div > div {
     background: #13151f !important;
     border: 1px solid #1e2235 !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     color: #e2e4ed !important;
-    font-size: 0.85rem !important;
+    font-size: 0.88rem !important;
 }
 
-/* ── Generate button ── */
+/* ── Buttons ── */
 .stButton > button {
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     font-family: 'Inter', sans-serif !important;
     font-weight: 600 !important;
-    font-size: 0.85rem !important;
-    transition: all 0.2s !important;
+    font-size: 0.88rem !important;
+    transition: all 0.25s ease !important;
     border: none !important;
 }
 .stButton > button[kind="primary"] {
-    background: linear-gradient(135deg, #4f8ef7 0%, #34c77b 100%) !important;
+    background: linear-gradient(135deg, #4f8ef7 0%, #3b82f6 100%) !important;
     color: #fff !important;
-    padding: 10px 0 !important;
+    padding: 12px 0 !important;
 }
 .stButton > button[kind="primary"]:hover {
-    opacity: 0.88 !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 20px rgba(79,142,247,0.28) !important;
+    box-shadow: 0 8px 24px rgba(79,142,247,0.3) !important;
+    opacity: 0.95 !important;
 }
 .stButton > button[kind="secondary"] {
     background: #13151f !important;
@@ -218,76 +219,56 @@ st.markdown("""
     color: #7a7d9a !important;
 }
 .stButton > button[kind="secondary"]:hover {
-    border-color: #4f8ef7 !important;
-    color: #4f8ef7 !important;
-}
-
-/* ── Output header ── */
-.out-header {
-    font-family: 'Syne', sans-serif;
-    font-size: 1.05rem; font-weight: 700;
-    color: #e2e4ed; margin-bottom: 16px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #1c1f2e;
-    display: flex; align-items: center; gap: 8px;
-}
-.out-badge {
-    font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em;
-    text-transform: uppercase; padding: 3px 8px; border-radius: 5px;
-    background: #14172a; color: #4f8ef7; border: 1px solid #2a2f50;
+    border-color: var(--accent-blue) !important;
+    color: var(--accent-blue) !important;
 }
 
 /* ── Variation cards ── */
-.var-wrap { margin-bottom: 10px; }
+.var-wrap { margin-bottom: 14px; }
 .var-card {
-    border-radius: 12px;
-    border: 1px solid #1e2235;
+    border-radius: 16px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px);
     overflow: hidden;
-    transition: border-color 0.15s;
+    transition: all 0.3s ease;
 }
-.var-card:hover { border-color: #2a2f50; }
+.var-card:hover { transform: translateY(-2px); border-color: var(--accent-blue); box-shadow: 0 12px 30px rgba(0,0,0,0.5); }
+
 .var-head {
-    padding: 10px 16px;
-    display: flex; align-items: center; gap: 10px;
-    border-bottom: 1px solid #1e2235;
+    padding: 14px 20px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--glass-border);
 }
 .var-letter {
-    width: 24px; height: 24px; border-radius: 6px;
+    width: 28px; height: 28px; border-radius: 8px;
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.72rem; font-weight: 700; flex-shrink: 0;
+    font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
 }
-.var-title-text { font-size: 0.82rem; font-weight: 600; }
-.var-body { padding: 14px 16px; font-size: 0.84rem; line-height: 1.75; white-space: pre-wrap; color: #b0b3c8; }
+.var-title-text { font-family: 'Outfit', sans-serif; font-size: 0.92rem; font-weight: 600; }
+.var-body { padding: 20px; font-size: 0.9rem; line-height: 1.75; white-space: pre-wrap; color: #b0b3c8; }
 
 /* variation colour themes */
-.v1 .var-head { background: #0e1428; } .v1 .var-letter { background: #1a2a60; color: #4f8ef7; } .v1 .var-title-text { color: #4f8ef7; } .v1 { border-color: #1a2a60; }
-.v2 .var-head { background: #0e1e18; } .v2 .var-letter { background: #1a3828; color: #34c77b; } .v2 .var-title-text { color: #34c77b; } .v2 { border-color: #1a3828; }
-.v3 .var-head { background: #1e0e18; } .v3 .var-letter { background: #3a1a30; color: #d46ef7; } .v3 .var-title-text { color: #d46ef7; } .v3 { border-color: #3a1a30; }
-.v4 .var-head { background: #1e1a0a; } .v4 .var-letter { background: #3a3010; color: #f7c34f; } .v4 .var-title-text { color: #f7c34f; } .v4 { border-color: #3a3010; }
-.v5 .var-head { background: #0e1a1e; } .v5 .var-letter { background: #103040; color: #4fc7f7; } .v5 .var-title-text { color: #4fc7f7; } .v5 { border-color: #103040; }
-
-/* ── Info box ── */
-.info-box {
-    background: #0f1117; border: 1px dashed #1e2235;
-    border-radius: 12px; padding: 28px 20px;
-    text-align: center; color: #3a3d55; font-size: 0.85rem; line-height: 1.7;
-}
-.info-box .icon { font-size: 2rem; margin-bottom: 10px; }
+.v1 .var-letter { background: rgba(79,142,247,0.15); color: #4f8ef7; } .v1 .var-title-text { color: #4f8ef7; }
+.v2 .var-letter { background: rgba(52,199,123,0.15); color: #34c77b; } .v2 .var-title-text { color: #34c77b; }
+.v3 .var-letter { background: rgba(212,110,247,0.15); color: #d46ef7; } .v3 .var-title-text { color: #d46ef7; }
+.v4 .var-letter { background: rgba(247,195,79,0.15); color: #f7c34f; } .v4 .var-title-text { color: #f7c34f; }
+.v5 .var-letter { background: rgba(79,199,247,0.15); color: #4fc7f7; } .v5 .var-title-text { color: #4fc7f7; }
 
 /* ── KB chips ── */
 .kb-chip {
-    font-size: 0.76rem; color: #7a7d9a;
+    font-size: 0.78rem; color: #7a7d9a;
     background: #13151f; border: 1px solid #1e2235;
-    border-radius: 7px; padding: 5px 10px; margin: 2px 0;
-    display: flex; align-items: center; gap: 6px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    border-radius: 8px; padding: 6px 12px; margin: 4px 0;
+    transition: all 0.2s;
 }
+.kb-chip:hover { border-color: var(--accent-blue); color: var(--text-main); }
 
-hr { border-color: #1c1f2e !important; margin: 12px 0 !important; }
+hr { border-color: #1c1f2e !important; margin: 20px 0 !important; }
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: #0b0c10; }
-::-webkit-scrollbar-thumb { background: #1e2235; border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #1e2235; border-radius: 10px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -535,7 +516,7 @@ with st.sidebar:
     st.markdown("""
     <div class="sb-logo">
         <div class="sb-logo-text">🎯 DialogueBot</div>
-        <div class="sb-logo-sub">ABHI · Powered by Gemini 1.5 Flash</div>
+        <div class="sb-logo-sub">ABHI · Intelligence Hub</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -627,7 +608,7 @@ with st.sidebar:
 # ── MAIN — multi-client dashboard
 hcol1, hcol_client, hcolM, hcol2 = st.columns([2.5, 2, 2, 1])
 with hcol1:
-    st.markdown('<h1 style="font-family:\'Syne\',sans-serif;font-size:1.4rem;margin:0">DialogueBot · Platform</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 style="font-family:\'Outfit\',sans-serif;font-size:1.6rem;font-weight:700;margin:0;letter-spacing:-0.03em">DialogueBot<span style="color:var(--accent-blue)">.</span></h1>', unsafe_allow_html=True)
 
 with hcol_client:
     # Client Selector List
@@ -799,9 +780,9 @@ with col_left:
         for msg in visible[:st.session_state.history_index + 1]:
             if msg["role"] == "user":
                 st.markdown(f"""
-                <div style="background:#14172a;border:1px solid #1e2235;border-radius:10px 10px 3px 10px;
-                            padding:10px 14px;margin:6px 0 6px 24px;font-size:.85rem;color:#e2e4ed;">
-                    🧑 {msg['content']}
+                <div style="background:var(--bg-tertiary);border:1px solid var(--border-color);border-radius:12px 12px 3px 12px;
+                            padding:12px 16px;margin:8px 0 8px 32px;font-size:.9rem;color:var(--text-main);box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                    <span style="font-size:1.1rem;margin-right:8px">🧑</span> {msg['content']}
                 </div>""", unsafe_allow_html=True)
             else:
                 content = msg["content"]
@@ -814,9 +795,9 @@ with col_left:
                     </div>""", unsafe_allow_html=True)
                 else:
                     st.markdown(f"""
-                    <div style="background:#0f1117;border:1px solid #1c1f2e;border-radius:10px 10px 10px 3px;
-                                padding:10px 14px;margin:6px 24px 6px 0;font-size:.85rem;color:#b0b3c8;white-space:pre-wrap;">
-                        🤖 {content}
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px 12px 12px 3px;
+                                padding:12px 16px;margin:8px 32px 8px 0;font-size:.9rem;color:var(--text-dim);white-space:pre-wrap;box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                        <span style="font-size:1.1rem;margin-right:8px">🤖</span> {content}
                     </div>""", unsafe_allow_html=True)
 
     follow_up = st.chat_input("Ask a follow-up or refine a variation…", key="chat_input")
@@ -833,7 +814,8 @@ if do_generate:
         instr_msg = instructions.strip() or "Generate re-engagement call variations."
         combined  = f"{first_msg}\n\n[INSTRUCTIONS] {instr_msg}".strip()
 
-        raw = run_generate(about, instructions, st.session_state.mode, language)
+        with st.spinner("Conducting research & architectural analysis..."):
+            raw = run_generate(about, instructions, st.session_state.mode, language)
         if raw:
             st.session_state.messages.append({"role": "user",      "content": f"[GENERATE] {combined[:100]}"})
             st.session_state.messages.append({"role": "assistant", "content": raw})
@@ -852,7 +834,8 @@ if do_generate:
 # ─────────────────────────────────────────────────────────────────────────────
 if follow_up:
     st.session_state.messages.append({"role": "user", "content": follow_up})
-    bot_reply = run_chat(follow_up, about, st.session_state.mode)
+    with st.spinner("AI is thinking..."):
+        bot_reply = run_chat(follow_up, about, st.session_state.mode)
     st.session_state.messages.append({"role": "assistant", "content": bot_reply})
     db_save_message(st.session_state.chat_id, "user", follow_up)
     db_save_message(st.session_state.chat_id, "assistant", bot_reply)
@@ -866,9 +849,9 @@ if follow_up:
 with col_right:
     mode_badge = "dialogue" if st.session_state.mode == "dialogue" else "script"
     st.markdown(f"""
-    <div class="out-header">
-        Outcomes
-        <span class="out-badge">{mode_badge} · 5 variations</span>
+    <div class="field-label" style="display:flex; justify-content:space-between; align-items:center; margin-top:0">
+        Generated Outcomes
+        <span style="font-size:0.65rem; background:rgba(79,142,247,0.1); padding:2px 8px; border-radius:4px; border:1px solid rgba(79,142,247,0.2); color:var(--accent-blue)">{mode_badge.upper()} · 5 VARIATIONS</span>
     </div>""", unsafe_allow_html=True)
 
     if not st.session_state.variations:
