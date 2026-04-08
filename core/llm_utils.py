@@ -123,16 +123,15 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
     # ── MISTRAL ──
     elif provider == "Mistral":
         try:
-            from mistralai.client import MistralClient
-            from mistralai.models.chat_completion import ChatMessage
-        except ImportError: return "Model Error: 'mistralai' not installed."
+            from mistralai import Mistral
+        except ImportError: return "Model Error: 'mistralai' 1.x library is not installed."
         key = st.secrets.get("MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
         if not key: return "Error: Missing Mistral API Key."
-        client = MistralClient(api_key=key)
+        client = Mistral(api_key=key)
         try:
-            resp = client.chat(
+            resp = client.chat.complete(
                 model="mistral-large-latest",
-                messages=[ChatMessage(role="system", content=system_prompt), ChatMessage(role="user", content=user_prompt)]
+                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}]
             )
             return resp.choices[0].message.content
         except Exception as e: return f"Mistral Error: {e}"
