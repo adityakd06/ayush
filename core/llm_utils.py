@@ -12,7 +12,7 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
         key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key: return "Error: Missing Google/Gemini API Key."
         genai.configure(api_key=key)
-        model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
+        model = genai.GenerativeModel('gemini-1.5-flash-latest', system_instruction=system_prompt)
         try:
             resp = model.generate_content(user_prompt)
             return resp.text
