@@ -434,7 +434,7 @@ def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
         try:
             resp = client.chat(
                 message=f"{system_prompt}\n\n{user_prompt}",
-                model="command-r-plus"
+                model="command-r-plus-08-2024"
             )
             return resp.text
         except Exception as e:
