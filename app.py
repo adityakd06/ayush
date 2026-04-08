@@ -21,6 +21,10 @@ st.set_page_config(
 DATA_DIR  = Path("data")
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "dialogue_store.db"
+MASTER_PROMPT_PATH = Path("config") / "master_prompt.txt"
+if not MASTER_PROMPT_PATH.parent.exists(): MASTER_PROMPT_PATH.parent.mkdir(parents=True)
+if not MASTER_PROMPT_PATH.exists(): 
+    MASTER_PROMPT_PATH.write_text("# Master Prompt\n- Be professional.", encoding="utf-8")
 
 def init_db():
     conn = sqlite3.connect(DB_PATH)
@@ -632,6 +636,13 @@ def parse_variations(raw: str):
 def build_system(mode: str, about: str) -> str:
     today = datetime.now().strftime("%B %d, %Y")
     cid = st.session_state.client_id
+    
+    # Load Master Prompt
+    master = ""
+    try:
+        master = MASTER_PROMPT_PATH.read_text(encoding="utf-8")
+    except Exception:
+        pass
 
     client_ctx = f"\n\nCLIENT CONTEXT:\n{about}" if about.strip() else ""
 
@@ -647,8 +658,10 @@ def build_system(mode: str, about: str) -> str:
             items = "\n\n---\n".join(f"[{s['name']}]\n{s['content']}" for s in items_db[:5])
             kb_ref = f"\n\nREFERENCE SCRIPTS FROM KNOWLEDGE BASE:\n{items}"
 
+    base_instr = f"{master}\n\n" if master else ""
+    
     if mode == "dialogue":
-        return f"""You are a senior dialogue writer and sales communication expert for Aditya Birla Health Insurance (ABHI). Today is {today}.
+        return f"""{base_instr}You are a senior dialogue writer and sales communication expert. Today is {today}.
 You write natural, spoken-language dialogues for voice bots and human agents.{client_ctx}{kb_ref}
 
 OUTPUT RULES — follow these exactly:
@@ -660,7 +673,7 @@ OUTPUT RULES — follow these exactly:
 5. Use the language/tone specified by the user."""
 
     else:  # script
-        return f"""You are an expert conversation flow script architect for ABHI voice AI systems. Today is {today}.
+        return f"""{base_instr}You are an expert conversation flow script architect for voice AI systems. Today is {today}.
 You build structured [STEP_X] scripts with conditional branching (→), validation rules, and dialogue templates.{client_ctx}{kb_ref}
 
 OUTPUT RULES — follow these exactly:
@@ -761,6 +774,18 @@ with st.sidebar:
             with c2:
                 if st.button("×", key=f"kd_{i}"):
                     db_kb_delete(d["id"]); st.rerun()
+    st.markdown("<hr>", unsafe_allow_html=True)
+
+    # MASTER PROMPT EDITOR
+    st.markdown('<div class="sb-section-label">⚙️ System Governance</div>', unsafe_allow_html=True)
+    with st.expander("Master Instructions"):
+        st.caption("Applied globally to all models")
+        m_curr = MASTER_PROMPT_PATH.read_text(encoding="utf-8")
+        m_new = st.text_area("Master Prompt", value=m_curr, height=250, key="master_p_input")
+        if st.button("Save Master Rules"):
+            MASTER_PROMPT_PATH.write_text(m_new, encoding="utf-8")
+            st.success("Master Rules Updated!")
+            st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MAIN — two-column layout matching the sketch
