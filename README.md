@@ -1,141 +1,53 @@
-# 🎯 DialogueBot — ABHI Voice Bot Optimizer
+# 🎯 DialogueBot · Enterprise Edition
 
-A Streamlit app for ABHI prompt engineers and product managers to generate, refine, and manage dialogue & script variations for the voice chatbot system — powered by Claude (Anthropic).
-
----
-
-## ✨ Features
-
-- **Dialogue Mode** — Generates 5 natural conversation dialogue variations (Short & Sweet, Professional, Friendly, Persuasive, Empathetic)
-- **Script Mode** — Generates 5 structured conversation flow scripts with branching logic
-- **Knowledge Base** — Store and reuse reference scripts & dialogues; the AI learns from them
-- **Chat & Refine** — Follow-up conversational chat to iterate on generated output
-- **Chat History** — Last 10 sessions saved and reloadable
-- **Download & Save** — Download any variation as `.txt` or save directly to the Knowledge Base
-- **Dark UI** — Sleek, modern interface optimised for daily use
+DialogueBot is a high-performance **Multi-Tenant Agentic Platform** designed to optimize voice AI dialogues and scripts at scale. It transforms raw business context into high-conversion AI dialogues through an autonomous orchestration layer.
 
 ---
 
-## 🚀 Deploy to Streamlit Cloud (Recommended)
+## 🏗️ The Architecture: "How it's Made"
 
-### Step 1 — Push to GitHub
+DialogueBot is built on a **3-Layer Architecture** that ensures data isolation, consistent governance, and self-correcting intelligence.
 
-```bash
-# From this folder
-git init
-git add .
-git commit -m "Initial DialogueBot commit"
-
-# Create a new repo on github.com, then:
-git remote add origin https://github.com/YOUR_USERNAME/dialoguebot.git
-git branch -M main
-git push -u origin main
-```
-
-### Step 2 — Connect to Streamlit Cloud
-
-1. Go to [share.streamlit.io](https://share.streamlit.io)
-2. Click **New app**
-3. Select your GitHub repo → branch `main` → main file `app.py`
-4. Click **Advanced settings**
-
-### Step 3 — Add Your API Key (Secret)
-
-In **Advanced settings → Secrets**, paste:
-
-```toml
-ANTHROPIC_API_KEY = "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxx"
-```
-
-Click **Deploy!**
+1.  **Orchestration (LangGraph):** The "Brain." It uses advanced state-graphs to move from simple generation to an agentic loop (**Plan → Research → Draft → Audit → Revise**).
+2.  **Infrastructure (SQLite & Streamlit):** A robust multi-tenant database partitioned by `client_id`, ensuring every brand's history and knowledge base remains strictly isolated.
+3.  **Intelligence Hub (Unified LLM):** A centralized hub connecting **7 elite LLM providers** (Gemini 2.5/3.1, Claude 3.5, OpenAI, Groq, Cohere, Mistral, and Hugging Face) with automatic failover and quota-hunting logic.
 
 ---
 
-## 🛠 Local Development
+## 🔁 "In & Out": The Data Flow
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
+### 📥 Inputs (What goes In):
+-   **Client Context ("About"):** The core identity and unique selling proposition of the brand.
+-   **Knowledge Base (KB):** Reference scripts, past dialogues, and specialized edge cases stored in the multi-tenant DB.
+-   **Governance ("Master Prompt"):** Global instructions that enforce brand tone, formatting rules, and "Universal Laws" across all models.
+-   **Task Instructions:** Specific user requests for the AI to execute.
 
-# Set your API key
-export ANTHROPIC_API_KEY="sk-ant-xxxxxxxx"
-
-# Or create .streamlit/secrets.toml (never commit this!)
-# [default]
-# ANTHROPIC_API_KEY = "sk-ant-xxxxxxxx"
-
-# Run
-streamlit run app.py
-```
+### 📤 Outputs (What comes Out):
+-   **5 Optimized Variations:** High-quality, diverse dialogue options labeled with `## VARIATION N`.
+-   **VoIP-Ready Formatting:** Scripts are automatically enriched with `{{placeholders}}` for direct implementation in voice AI pipelines.
+-   **Self-Audited Content:** Every output has been vetted by an internal "Auditor AI" to ensure it matches the Master Prompt before being displayed.
 
 ---
 
-## 📁 Project Structure
-
-```
-dialoguebot/
-├── app.py                    # Main Streamlit application
-├── requirements.txt          # Python dependencies
-├── .streamlit/
-│   ├── config.toml           # Theme & server config
-│   └── secrets.toml          # ⚠️ LOCAL ONLY — never commit
-├── data/
-│   ├── knowledge_base.json   # Stored scripts & dialogues
-│   └── chats/                # Saved chat sessions (up to 10)
-├── .gitignore
-└── README.md
-```
+## 🛠️ Built With:
+-   **Framework:** [Streamlit](https://streamlit.io/) (Premium Dark Mode UI)
+-   **Agentic Logic:** [LangGraph](https://github.com/langchain-ai/langgraph) (Self-Correction Loops)
+-   **Database:** [SQLite](https://www.sqlite.org/) (Multi-Tenant Persistent Storage)
+-   **Intelligence:** Integrated API Hub (Gemini 2.5/3.1, GPT-4o, Claude 3.5 Sonnet, Llama 3.3, Mistral Large)
 
 ---
 
-## 🔄 Updating the App
-
-Any changes pushed to your `main` branch on GitHub will automatically redeploy on Streamlit Cloud within ~1 minute.
-
-```bash
-git add .
-git commit -m "Update: improved system prompt for script mode"
-git push
-```
+## ⚖️ Why This Exists?
+In enterprise Voice AI, consistency is the hardest challenge. Variations in model behavior can break pipelines. DialogueBot solves this by:
+1.  **Centralizing Governance:** One Master Prompt to rule all models.
+2.  **Ensuring Quality:** Automated self-auditing ensures no script is missing a placeholder.
+3.  **Scaling Clients:** Manage 100+ clients from a single interface with perfect data isolation.
 
 ---
 
-## 📝 How to Use
+### 🚀 Getting Started
+1. Install dependencies: `pip install -r requirements.txt`
+2. Configure keys in `.env` or Streamlit Secrets.
+3. Run: `streamlit run app.py`
 
-### Generating Variations
-
-1. Select **Dialogue Mode** (natural speech) or **Script Mode** (branching logic)
-2. Paste a conversation transcript in the **Context** box
-3. Type instructions in the **Instructions** box — e.g. *"Generate for when customer says they already have LIC policy"*
-4. Set language & tone preferences
-5. Click **Generate 5 Variations**
-
-### Knowledge Base
-
-- Add reference scripts/dialogues via the sidebar
-- The AI will automatically use them as examples when generating new content
-- Save any generated variation back to the KB with **Save to KB**
-
-### Chat & Refine
-
-After generating, use the chat box to:
-- "Make V2 shorter and more direct"
-- "Translate V3 to pure Hindi"
-- "Add a callback scheduling section to V4"
-- "What's the best approach if the customer is very reluctant?"
-
----
-
-## ⚙️ Environment Variables
-
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Your Anthropic API key (required) |
-
----
-
-## 📌 Notes
-
-- **Knowledge Base** is stored in `data/knowledge_base.json` — on Streamlit Cloud, this resets on each deployment. For persistent KB, consider exporting to JSON and re-importing, or upgrading to a database (Supabase, Firebase, etc.)
-- **Chat History** similarly resets on redeployment — sessions are meant to be used within a working session
-- Model used: `claude-sonnet-4-20250514`
+*Powered by the LangGraph Autonomous Engine.*
