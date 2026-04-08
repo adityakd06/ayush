@@ -9,6 +9,7 @@ from google.api_core import exceptions as google_exceptions
 # Load local .env
 load_dotenv()
 from core.graph_engine import app_graph
+from core.llm_utils import run_llm_request
 
 # ── MUST BE FIRST ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -307,208 +308,7 @@ ss("history_index", 0)
 ss("llm_provider", "Gemini") # Gemini | OpenAI | Claude | Groq | Cohere | Mistral | HuggingFace
 ss("pending_new_chat", False)
 
-# ── GEMINI ────────────────────────────────────────────────────────────────────────
-@st.cache_data(show_spinner=False)
-def discover_best_model(api_key):
-    """List available models and pick the best one. Cached by API key."""
-    try:
-        genai.configure(api_key=api_key)
-        models = [m.name for m in genai.list_models() if "generateContent" in m.supported_generation_methods]
-        
-        # Priority list
-        priorities = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro"]
-        for p in priorities:
-            if p in models: return p
-            
-        # Fallback
-        for m in models:
-            if "gemini" in m.lower(): return m
-        return models[0] if models else "models/gemini-1.5-flash"
-    except Exception:
-        return "models/gemini-1.5-flash"
-
-@st.cache_resource
-def get_model():
-    # Search priority: st.secrets -> os.environ (includes .env)
-    key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-    if not key:
-        key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-    
-    if not key:
-        return None
-    
-    # Configure and pick the best model for this key
-    best_model = discover_best_model(key)
-    genai.configure(api_key=key)
-    
-    return genai.GenerativeModel(
-        model_name=best_model,
-        generation_config=genai.types.GenerationConfig(temperature=0.9, max_output_tokens=4096),
-    )
-
-# ── UNIFIED LLM ENGINE ────────────────────────────────────────────────────────────
-def run_llm_request(system_prompt, user_prompt, provider=None, model=None):
-    provider = provider or st.session_state.llm_provider
-    
-    if provider == "Gemini":
-        gm = get_model()
-        if not gm: return None
-        try:
-            resp = call_gemini_with_retry(gm.generate_content, f"{system_prompt}\n\n{user_prompt}")
-            return resp.text
-        except Exception as e:
-            st.error(f"Gemini Error: {e}")
-            return None
-
-    elif provider == "OpenAI":
-        try:
-            import openai
-        except ImportError:
-            st.error("Model Error: 'openai' library is not installed in your venv. Run: pip install openai")
-            return None
-        key = st.secrets.get("OPENAI_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        if not key: 
-            st.error("Missing OPENAI_API_KEY. Add it to Streamlit Secrets or your .env file.")
-            return None
-        client = openai.OpenAI(api_key=key)
-        try:
-            resp = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role":"system","content":system_prompt}, {"role":"user","content":user_prompt}]
-            )
-            return resp.choices[0].message.content
-        except Exception as e:
-            st.error(f"OpenAI Error: {e}")
-            return None
-
-    elif provider == "Claude":
-        try:
-            import anthropic
-        except ImportError:
-            st.error("Model Error: 'anthropic' library is not installed in your venv. Run: pip install anthropic")
-            return None
-        key = st.secrets.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
-        if not key: 
-            st.error("Missing ANTHROPIC_API_KEY. Add it to Streamlit Secrets or your .env file.")
-            return None
-        client = anthropic.Anthropic(api_key=key)
-        try:
-            resp = client.messages.create(
-                model="claude-3-5-sonnet-20240620",
-                max_tokens=4096,
-                system=system_prompt,
-                messages=[{"role":"user","content":user_prompt}]
-            )
-            return resp.content[0].text
-        except Exception as e:
-            st.error(f"Claude Error: {e}")
-            return None
-
-    elif provider == "Groq/Meta":
-        try:
-            import groq
-        except ImportError:
-            st.error("Model Error: 'groq' library is not installed in your venv. Run: pip install groq")
-            return None
-        key = st.secrets.get("GROQ_API_KEY") or os.environ.get("GROQ_API_KEY")
-        if not key: 
-            st.error("Missing GROQ_API_KEY. Add it to Streamlit Secrets or your .env file.")
-            return None
-        client = groq.Groq(api_key=key)
-        try:
-            resp = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=[{"role":"system","content":system_prompt}, {"role":"user","content":user_prompt}]
-            )
-            return resp.choices[0].message.content
-        except Exception as e:
-            st.error(f"Groq Error: {e}")
-            return None
-
-    elif provider == "Cohere":
-        try:
-            import cohere
-        except ImportError:
-            st.error("Model Error: 'cohere' library is not installed in your venv. Run: pip install cohere")
-            return None
-        key = st.secrets.get("COHERE_API_KEY") or os.environ.get("COHERE_API_KEY")
-        if not key:
-            st.error("Missing COHERE_API_KEY. Add it to Streamlit Secrets or your .env file.")
-            return None
-        client = cohere.Client(api_key=key)
-        try:
-            resp = client.chat(
-                message=f"{system_prompt}\n\n{user_prompt}",
-                model="command-r-plus-08-2024"
-            )
-            return resp.text
-        except Exception as e:
-            st.error(f"Cohere Error: {e}")
-            return None
-
-    elif provider == "Mistral":
-        try:
-            import mistralai
-            from mistralai.client import MistralClient
-            from mistralai.models.chat_completion import ChatMessage
-        except ImportError:
-            st.error("Model Error: 'mistralai' library is not installed. Run: pip install mistralai")
-            return None
-        key = st.secrets.get("MISTRAL_API_KEY") or os.environ.get("MISTRAL_API_KEY")
-        if not key:
-            st.error("Missing MISTRAL_API_KEY.")
-            return None
-        client = MistralClient(api_key=key)
-        try:
-            resp = client.chat(
-                model="mistral-large-latest",
-                messages=[ChatMessage(role="system", content=system_prompt), ChatMessage(role="user", content=user_prompt)]
-            )
-            return resp.choices[0].message.content
-        except Exception as e:
-            st.error(f"Mistral Error: {e}")
-            return None
-
-    elif provider == "HuggingFace":
-        try:
-            from huggingface_hub import InferenceClient
-        except ImportError:
-            st.error("Model Error: 'huggingface_hub' not installed. Run: pip install huggingface_hub")
-            return None
-        key = st.secrets.get("HF_API_KEY") or st.secrets.get("HUGGINGFACE_API_KEY") or os.environ.get("HF_API_KEY")
-        if not key:
-            st.error("Missing HF_API_KEY.")
-            return None
-        client = InferenceClient(api_key=key)
-        try:
-            # Using Qwen2.5-72B-Instruct as a high-quality default open source model
-            resp = client.chat_completion(
-                model="Qwen/Qwen2.5-72B-Instruct",
-                messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
-                max_tokens=4096
-            )
-            return resp.choices[0].message.content
-        except Exception as e:
-            st.error(f"Hugging Face Error: {e}")
-            return None
-    
-    return None
-
-def call_gemini_with_retry(func, *args, **kwargs):
-    """Retries a Gemini call on 429 errors."""
-    max_retries = 3
-    for i in range(max_retries):
-        try:
-            return func(*args, **kwargs)
-        except google_exceptions.ResourceExhausted as e:
-            if i < max_retries - 1:
-                wait_time = (i + 1) * 3
-                st.info(f"⏳ Rate limit hit. Retrying in {wait_time}s... (Attempt {i+1}/{max_retries})")
-                time.sleep(wait_time)
-            else:
-                raise e
-        except Exception as e:
-            raise e
+# (LLM helpers now moved to core/llm_utils.py)
 
 # ── DATA HELPERS ─────────────────────────────────────────────────────────────────
 # ── DATABASE HELPERS ────────────────────────────────────────────────────────────
@@ -719,13 +519,13 @@ def run_generate(about, instructions, mode, language):
     if not final_state.get("final_output"):
         system = build_system(mode, about)
         prompt = f"LANGUAGE: {language}\n\n{instructions if instructions.strip() else 'Generate variations.'}"
-        return run_llm_request(system, prompt)
+        return run_llm_request(st.session_state.llm_provider, system, prompt)
     
     return final_state["final_output"]
 
 def run_chat(user_msg, about, mode):
     system = build_system(mode, about)
-    return run_llm_request(f"[System Instruction: {system[:500]}]", user_msg)
+    return run_llm_request(st.session_state.llm_provider, f"[System Instruction: {system[:500]}]", user_msg)
 
 # ════════════════════════════════════════════════════════════════════════════════
 # SIDEBAR

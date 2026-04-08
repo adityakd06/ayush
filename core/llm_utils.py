@@ -9,9 +9,8 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
         try:
             import google.generativeai as genai
         except ImportError: return "Model Error: 'google-generativeai' not installed."
-        # Check multiple possible secret names for Gemini
         key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-        if not key: return "Error: Missing Google/Gemini API Key in secrets."
+        if not key: return "Error: Missing Google/Gemini API Key."
         genai.configure(api_key=key)
         model = genai.GenerativeModel('gemini-1.5-flash', system_instruction=system_prompt)
         try:
@@ -34,6 +33,24 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
             )
             return resp.choices[0].message.content
         except Exception as e: return f"OpenAI Error: {e}"
+
+    # ── ANTHROPIC CLAUDE ──
+    elif provider == "Claude":
+        try:
+            import anthropic
+        except ImportError: return "Model Error: 'anthropic' not installed."
+        key = st.secrets.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
+        if not key: return "Error: Missing Anthropic API Key."
+        client = anthropic.Anthropic(api_key=key)
+        try:
+            resp = client.messages.create(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=4096,
+                system=system_prompt,
+                messages=[{"role":"user","content":user_prompt}]
+            )
+            return resp.content[0].text
+        except Exception as e: return f"Claude Error: {e}"
 
     # ── GROQ (META LLAMA) ──
     elif provider == "Groq/Meta":
