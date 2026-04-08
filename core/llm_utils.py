@@ -12,7 +12,20 @@ def run_llm_request(provider: str, system_prompt: str, user_prompt: str) -> str:
         key = st.secrets.get("GOOGLE_API_KEY") or st.secrets.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
         if not key: return "Error: Missing Google/Gemini API Key."
         genai.configure(api_key=key)
-        model = genai.GenerativeModel('gemini-1.5-pro', system_instruction=system_prompt)
+        # Auto-discover the best model available for this key
+        try:
+            available = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            # Preference order
+            pref = ["models/gemini-1.5-flash", "models/gemini-1.5-pro", "models/gemini-pro", "models/gemini-1.0-pro"]
+            best = "gemini-pro" # default fallback
+            for p in pref:
+                if p in available:
+                    best = p
+                    break
+            model = genai.GenerativeModel(best, system_instruction=system_prompt)
+        except:
+            model = genai.GenerativeModel('gemini-pro', system_instruction=system_prompt)
+        
         try:
             resp = model.generate_content(user_prompt)
             return resp.text
